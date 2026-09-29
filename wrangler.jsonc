@@ -17,7 +17,7 @@
     {
       "binding": "DB",
       "database_name": "cf-erp",
-      "database_id": "REPLACE_WITH_YOUR_D1_ID"
+      "database_id": "b69ac3fc-14c1-4fb8-b9ac-be3eafa66ff0"
     }
   ],
   // 正式使用建议：npx wrangler secret put ADMIN_PASSWORD（secret 会覆盖这里的 vars）
