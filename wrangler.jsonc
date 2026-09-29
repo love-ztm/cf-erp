@@ -1,0 +1,31 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cf-erp",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-09-01",
+  // 让 esbuild 以文本方式内嵌 schema.sql
+  "rules": [{ "type": "Text", "globs": ["**/*.sql"], "fallthrough": true }],
+  // 前端静态文件，非 /api 路径直接走静态资源，未命中回退 index.html
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  // 部署前先 `npx wrangler d1 create cf-erp`，把返回的 database_id 填到这里
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "cf-erp",
+      "database_id": "REPLACE_WITH_YOUR_D1_ID"
+    }
+  ],
+  // 正式使用建议：npx wrangler secret put ADMIN_PASSWORD（secret 会覆盖这里的 vars）
+  "vars": {
+    "ADMIN_PASSWORD": "admin123"
+  },
+  // 定时触发器（默认每天 UTC 18:00，即北京时间凌晨 02:00 自动执行一次）
+  "triggers": {
+    "crons": ["0 18 * * *"]
+  }
+}

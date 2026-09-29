@@ -1,0 +1,1402 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cloud ERP 进销存</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div id="app"></div>
+
+  <script type="text/x-template" id="app-template">
+    <!-- 登录页 -->
+    <div v-if="booted && !loggedIn" class="login-wrap">
+      <div class="login-box">
+        <h1>{{ company.app_title || 'Cloud ERP 进销存' }}</h1>
+        <p>{{ company.company_name || '企业进销存管理系统' }} · 进销存 · 资金 · 报表</p>
+        <form @submit.prevent="login">
+          <div class="form-row">
+            <label>登录账号</label>
+            <input v-model="loginUser" placeholder="admin 或员工账号" autofocus />
+          </div>
+          <div class="form-row">
+            <label>登录密码</label>
+            <input type="password" v-model="loginPwd" placeholder="请输入密码" />
+          </div>
+          <div v-if="loginErr" class="text-danger" style="margin-bottom:10px">{{ loginErr }}</div>
+          <button class="btn-primary" style="width:100%" type="submit">登 录</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- 主界面 -->
+    <div v-else-if="booted" class="layout">
+      <aside class="sidebar">
+        <div class="logo">
+          <span>{{ company.app_title || 'Cloud ERP' }}</span>
+          <small>{{ company.company_name || '进销存管理系统' }}</small>
+        </div>
+        <nav class="nav">
+          <a v-for="n in nav" :key="n.key" v-show="navVisible(n)" :class="{ active: view === n.key }" @click="go(n.key)">
+            {{ n.icon }}　{{ n.label }}
+            <span v-if="n.key === 'settings' && currentUser?.role === 'admin'" class="badge blue" style="margin-left:6px;font-size:10px">管理</span>
+          </a>
+        </nav>
+        <div class="side-foot">
+          <div style="margin-bottom:8px;font-size:12px;color:var(--muted)">
+            👤 {{ currentUser?.name || currentUser?.username || '用户' }}
+            <span class="badge" :class="currentUser?.role === 'admin' ? 'blue' : currentUser?.role === 'sales' ? 'green' : 'gray'" style="margin-left:4px">{{ roleLabel(currentUser?.role) }}</span>
+          </div>
+          <button @click="logout">退出登录</button>
+        </div>
+      </aside>
+
+      <main class="main">
+        <!-- ===== 概览 ===== -->
+        <template v-if="view === 'dashboard'">
+          <div class="page-header">
+            <div class="page-title">数据看板概览</div>
+            <div class="toolbar" style="margin:0">
+              <input type="date" v-model="dashFrom" @change="loadDashboard" style="width:140px" />
+              <span class="text-muted">至</span>
+              <input type="date" v-model="dashTo" @change="loadDashboard" style="width:140px" />
+              <button class="btn-sm" @click="setDashRange('today')">今日</button>
+              <button class="btn-sm" @click="setDashRange('7d')">近7天</button>
+              <button class="btn-sm btn-primary" @click="setDashRange('month')">本月</button>
+            </div>
+          </div>
+          <template v-if="dash">
+            <div class="grid-cards">
+              <div class="stat-card blue">
+                <div class="stat-header"><span class="stat-label">销售总额</span><span class="stat-tag">已扣优惠</span></div>
+                <div class="stat-value blue">{{ money(dash.sales.revenue) }}</div>
+                <div class="stat-sub">本期共 {{ dash.sales.orders }} 笔销售单</div>
+              </div>
+              <div class="stat-card green">
+                <div class="stat-header"><span class="stat-label">商品毛利（净）</span><span class="stat-tag" style="background:#ecfdf5;color:#059669">核心利润</span></div>
+                <div class="stat-value green">{{ money(dash.sales.profit) }}</div>
+                <div class="stat-sub">销售毛利率 {{ dash.sales.revenue ? ((dash.sales.profit / dash.sales.revenue) * 100).toFixed(1) + '%' : '—' }}</div>
+              </div>
+              <div class="stat-card amber">
+                <div class="stat-header"><span class="stat-label">采购进货支出</span><span class="stat-tag">{{ dash.purchases.orders }} 单</span></div>
+                <div class="stat-value">{{ money(dash.purchases.total) }}</div>
+                <div class="stat-sub">包含退货冲抵后金额</div>
+              </div>
+              <div class="stat-card purple">
+                <div class="stat-header"><span class="stat-label">资产池 · 账户总余额</span><span class="stat-tag">实时</span></div>
+                <div class="stat-value purple">{{ money(dash.money.accountTotal) }}</div>
+                <div class="stat-sub">{{ dash.counts.accounts }} 个结算账户流动资金</div>
+              </div>
+            </div>
+
+            <div class="grid-cards">
+              <div class="stat-card">
+                <div class="stat-header"><span class="stat-label">客户欠款（应收账款）</span><span class="stat-tag">资产</span></div>
+                <div class="stat-value" :class="dash.money.customerDebt > 0 ? 'danger' : ''">{{ money(dash.money.customerDebt) }}</div>
+                <div class="stat-sub">客户未付清货款总计</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-header"><span class="stat-label">供应商欠款（应付账款）</span><span class="stat-tag">负债</span></div>
+                <div class="stat-value" :class="dash.money.supplierDebt > 0 ? 'danger' : ''">{{ money(dash.money.supplierDebt) }}</div>
+                <div class="stat-sub">应付供应商采购货款</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-header"><span class="stat-label">其他收支净额</span><span class="stat-tag">非单据</span></div>
+                <div class="stat-value" :class="dash.money.otherNet >= 0 ? 'blue' : 'danger'">{{ money(dash.money.otherNet) }}</div>
+                <div class="stat-sub">维修等收入 − 日常开支</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-header"><span class="stat-label">在册档案总数</span><span class="stat-tag">基础</span></div>
+                <div class="stat-value">{{ dash.counts.products }} <small style="font-size:13px;font-weight:400;color:var(--muted)">品</small></div>
+                <div class="stat-sub">{{ dash.counts.parties }} 家往来合作单位</div>
+              </div>
+            </div>
+
+            <div class="card">
+              <h3>⚡ 低库存智能预警</h3>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>商品名称</th><th class="num">当前可用库存</th><th class="num">最低预警阈值</th><th>单位</th><th class="num">操作</th></tr></thead>
+                  <tbody>
+                    <tr v-for="p in dash.lowStock" :key="p.id">
+                      <td><strong>{{ p.name }}</strong></td>
+                      <td class="num"><span class="badge red">{{ qfmt(p.stock) }}</span></td>
+                      <td class="num text-muted">{{ qfmt(p.low_stock) }}</td>
+                      <td>{{ p.unit }}</td>
+                      <td class="num"><button class="btn-sm btn-primary" @click="go('purchase')">去采购</button></td>
+                    </tr>
+                  </tbody>
+                </table>
+                <div v-if="!dash.lowStock.length" class="empty">库存健康，暂无低于预警线的商品 👏</div>
+              </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:20px">
+              <div class="card" style="margin-bottom:0">
+                <h3>🛍️ 最近销售动态</h3>
+                <div class="table-wrap">
+                  <table>
+                    <thead><tr><th>时间</th><th>客户</th><th class="num">实收金额</th></tr></thead>
+                    <tbody>
+                      <tr v-for="s in dash.recentSales" :key="s.id">
+                        <td class="text-muted">{{ dt(s.created_at) }}</td>
+                        <td>{{ s.customer_name || '散客' }} <span v-if="s.kind === 'return'" class="badge gray">退货</span></td>
+                        <td class="num"><strong>{{ money(s.kind === 'return' ? -(s.total - s.discount) : s.total - s.discount) }}</strong></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div v-if="!dash.recentSales.length" class="empty">暂无销售动态</div>
+                </div>
+              </div>
+              <div class="card" style="margin-bottom:0">
+                <h3>📦 最近采购入库</h3>
+                <div class="table-wrap">
+                  <table>
+                    <thead><tr><th>时间</th><th>供应商</th><th class="num">进货金额</th></tr></thead>
+                    <tbody>
+                      <tr v-for="pu in dash.recentPurchases" :key="pu.id">
+                        <td class="text-muted">{{ dt(pu.created_at) }}</td>
+                        <td>{{ pu.supplier_name || '—' }} <span v-if="pu.kind === 'return'" class="badge gray">退货</span></td>
+                        <td class="num"><strong>{{ money(pu.kind === 'return' ? -(pu.total - pu.discount) : pu.total - pu.discount) }}</strong></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div v-if="!dash.recentPurchases.length" class="empty">暂无采购动态</div>
+                </div>
+              </div>
+            </div>
+          </template>
+        </template>
+
+        <!-- ===== 商品管理 ===== -->
+        <template v-else-if="view === 'products'">
+          <div class="page-title">商品管理</div>
+          <div class="card">
+            <div class="toolbar">
+              <input v-model="prodSearch" placeholder="搜索名称 / 编号 / 条码" style="width:220px" />
+              <select v-model="prodCategory" style="width:140px">
+                <option value="">全部类别</option>
+                <option v-for="cst in categories" :key="cst" :value="cst">{{ cst }}</option>
+              </select>
+              <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:13px;color:var(--muted)">
+                <input type="checkbox" v-model="showArchived" style="width:auto" /> 显示已停用
+              </label>
+              <div style="flex:1"></div>
+              <button class="btn-primary" @click="openProdModal(null)">＋ 新增商品</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>名称</th><th>编号</th><th>条码</th><th>类别</th><th>单位</th><th class="num">库存</th><th class="num">成本均价</th><th class="num">售价</th><th class="num">低库存阈值</th><th>状态</th><th>操作</th></tr></thead>
+                <tbody>
+                  <tr v-for="p in filteredProducts" :key="p.id">
+                    <td>{{ p.name }}</td>
+                    <td class="text-muted">{{ p.sku || '—' }}</td>
+                    <td class="text-muted">{{ p.barcode || '—' }}</td>
+                    <td class="text-muted">{{ p.category || '—' }}</td>
+                    <td>{{ p.unit }}</td>
+                    <td class="num">
+                      <span v-if="p.no_stock" class="badge blue">服务</span>
+                      <span v-else :class="{ 'text-danger': p.low_stock > 0 && p.stock <= p.low_stock }">{{ qfmt(p.stock) }}</span>
+                    </td>
+                    <td class="num">{{ money(p.avg_cost) }}<span v-if="p.cost_manual" class="badge gray" style="margin-left:4px">手定</span></td>
+                    <td class="num">{{ money(p.sale_price) }}</td>
+                    <td class="num text-muted">{{ p.no_stock ? '—' : qfmt(p.low_stock) }}</td>
+                    <td><span class="badge" :class="p.archived ? 'gray' : 'green'">{{ p.archived ? '已停用' : '正常' }}</span></td>
+                    <td>
+                      <button v-if="!p.no_stock" class="btn-sm" @click="openAdjust(p)">调整</button>
+                      <button class="btn-sm" @click="openProdModal(p)">编辑</button>
+                      <button class="btn-sm btn-danger" @click="delProduct(p)">删除</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <div v-if="!filteredProducts.length" class="empty">暂无商品，点右上角新增</div>
+            </div>
+          </div>
+        </template>
+
+        <!-- ===== 采购入库 ===== -->
+        <template v-else-if="view === 'purchase'">
+          <div class="page-title">采购入库</div>
+          <div class="card">
+            <h3>新建采购单</h3>
+            <div class="form-grid" style="margin-bottom:12px">
+              <div>
+                <label>供应商</label>
+                <select v-model="purchaseForm.supplier_id">
+                  <option value="">— 手动输入 —</option>
+                  <option v-for="s in suppliers" :key="s.id" :value="s.id">{{ s.name }}{{ debtLabel(s) ? '（' + debtLabel(s) + '）' : '' }}</option>
+                </select>
+              </div>
+              <div v-if="!purchaseForm.supplier_id">
+                <label>供应商名称（手动）</label>
+                <input v-model="purchaseForm.name_free" placeholder="可留空" />
+              </div>
+              <div>
+                <label>结算账户（本次付款用）</label>
+                <select v-model="purchaseForm.account_id">
+                  <option value="">— 未设置 —</option>
+                  <option v-for="a in accounts" :key="a.id" :value="a.id">{{ a.name }}（{{ money(a.balance) }}）</option>
+                </select>
+              </div>
+              <div>
+                <label>备注</label>
+                <input v-model="purchaseForm.note" placeholder="单号、运费等，可留空" />
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table class="items-edit">
+                <thead><tr><th style="min-width:200px">商品</th><th>数量</th><th>单价（进货成本）</th><th class="num">小计</th><th></th></tr></thead>
+                <tbody>
+                  <tr v-for="(it, i) in purchaseForm.items" :key="i">
+                    <td style="min-width:230px">
+                      <product-picker v-model="it.product_id" :products="purchasableProducts" mode="purchase" @update:model-value="onProductChange(purchaseForm, it, $event)" />
+                    </td>
+                    <td><input type="number" min="0" step="any" v-model.number="it.qty" style="width:95px" /></td>
+                    <td><input type="number" min="0" step="0.01" v-model.number="it.price" style="width:115px" /></td>
+                    <td class="num">{{ money(it.qty * it.price) }}</td>
+                    <td><button class="del-row" @click="delRow(purchaseForm, i)">×</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="form-grid" style="margin:12px 0">
+              <div><label>整单优惠金额</label><input type="number" min="0" step="0.01" v-model.number="purchaseForm.discount" /></div>
+              <div><label>本次付款</label><input type="number" min="0" step="0.01" v-model.number="purchaseForm.paid" /></div>
+            </div>
+            <div class="total-line">
+              <span class="text-muted">合计 {{ money(purchaseTotal) }}</span>
+              <span class="text-muted">应付 {{ money(purchaseNet) }}</span>
+              <strong :class="purchaseNet - Number(purchaseForm.paid || 0) > 0 ? 'text-danger' : ''">欠款 {{ money(purchaseNet - Number(purchaseForm.paid || 0)) }}</strong>
+              <button @click="addRow(purchaseForm)">＋ 加一行</button>
+              <button @click="addNewProduct('purchaseForm')">＋ 新商品</button>
+              <button class="btn-primary" :disabled="submitting" @click="submitOrder('purchase')">提交入库</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>采购记录</h3>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>时间</th><th>供应商</th><th class="num">金额</th><th class="num">已付</th><th class="num">欠款</th><th class="num">明细数</th><th>备注</th><th>操作</th></tr></thead>
+                <tbody>
+                  <tr v-for="pu in purchases" :key="pu.id">
+                    <td>{{ dt(pu.created_at) }}</td>
+                    <td>{{ pu.supplier_name || '—' }} <span v-if="pu.kind === 'return'" class="badge gray">退货</span></td>
+                    <td class="num" :class="pu.kind === 'return' ? 'text-green' : ''">{{ money(pu.kind === 'return' ? -(pu.total - pu.discount) : pu.total - pu.discount) }}</td>
+                    <td class="num">{{ money(pu.paid) }}</td>
+                    <td class="num" :class="pu.kind === 'normal' && pu.total - pu.discount - pu.paid > 0 ? 'text-danger' : ''">{{ money(pu.kind === 'normal' ? pu.total - pu.discount - pu.paid : 0) }}</td>
+                    <td class="num">{{ pu.item_count }}</td>
+                    <td class="text-muted">{{ pu.note || '' }}</td>
+                    <td>
+                      <button class="btn-sm" @click="viewOrder('purchase', pu.id)">查看</button>
+                      <button v-if="pu.kind === 'normal'" class="btn-sm" @click="openOrderEdit('purchases', pu.id)">修改</button>
+                      <button v-if="pu.kind === 'normal'" class="btn-sm" @click="openReturn('purchases', pu.id)">退货</button>
+                      <button class="btn-sm btn-danger" @click="delOrder('purchase', pu.id)">删除</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <div v-if="!purchases.length" class="empty">暂无采购记录</div>
+            </div>
+          </div>
+        </template>
+
+        <!-- ===== 销售出库 ===== -->
+        <template v-else-if="view === 'sales'">
+          <div class="page-title">销售出库</div>
+          <div class="card">
+            <h3>新建销售单</h3>
+            <div class="form-grid" style="margin-bottom:12px">
+              <div>
+                <label>客户</label>
+                <select v-model="saleForm.customer_id">
+                  <option value="">— 手动输入 —</option>
+                  <option v-for="s in customers" :key="s.id" :value="s.id">{{ s.name }}{{ debtLabel(s) ? '（' + debtLabel(s) + '）' : '' }}</option>
+                </select>
+              </div>
+              <div v-if="!saleForm.customer_id">
+                <label>客户名称（手动）</label>
+                <input v-model="saleForm.name_free" placeholder="可留空" />
+              </div>
+              <div>
+                <label>结算账户（本次收款用）</label>
+                <select v-model="saleForm.account_id">
+                  <option value="">— 未设置 —</option>
+                  <option v-for="a in accounts" :key="a.id" :value="a.id">{{ a.name }}（{{ money(a.balance) }}）</option>
+                </select>
+              </div>
+              <div>
+                <label>备注</label>
+                <input v-model="saleForm.note" placeholder="可留空" />
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table class="items-edit">
+                <thead><tr><th style="min-width:200px">商品</th><th>数量</th><th>单价（售价）</th><th class="num">小计</th><th></th></tr></thead>
+                <tbody>
+                  <tr v-for="(it, i) in saleForm.items" :key="i">
+                    <td style="min-width:230px">
+                      <product-picker v-model="it.product_id" :products="activeProducts" mode="sale" @update:model-value="onProductChange(saleForm, it, $event)" />
+                    </td>
+                    <td><input type="number" min="0" step="any" v-model.number="it.qty" style="width:95px" /></td>
+                    <td><input type="number" min="0" step="0.01" v-model.number="it.price" style="width:115px" /></td>
+                    <td class="num">{{ money(it.qty * it.price) }}</td>
+                    <td><button class="del-row" @click="delRow(saleForm, i)">×</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="form-grid" style="margin:12px 0">
+              <div><label>整单优惠金额</label><input type="number" min="0" step="0.01" v-model.number="saleForm.discount" /></div>
+              <div><label>本次收款</label><input type="number" min="0" step="0.01" v-model.number="saleForm.paid" /></div>
+            </div>
+            <div class="total-line">
+              <span class="text-muted">合计 {{ money(saleTotal) }}</span>
+              <span class="text-muted">应收 {{ money(saleNet) }}</span>
+              <strong :class="saleNet - Number(saleForm.paid || 0) > 0 ? 'text-danger' : ''">欠款 {{ money(saleNet - Number(saleForm.paid || 0)) }}</strong>
+              <span class="text-muted">预计毛利</span>
+              <strong :class="saleProfit - Number(saleForm.discount || 0) >= 0 ? 'text-green' : 'text-danger'">{{ money(saleProfit - Number(saleForm.discount || 0)) }}</strong>
+              <button @click="addRow(saleForm)">＋ 加一行</button>
+              <button @click="addNewProduct('saleForm')">＋ 新商品</button>
+              <button class="btn-primary" :disabled="submitting" @click="submitOrder('sales')">提交出库</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>销售记录</h3>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>时间</th><th>客户</th><th class="num">金额</th><th class="num">已收</th><th class="num">欠款</th><th class="num">明细数</th><th>备注</th><th>操作</th></tr></thead>
+                <tbody>
+                  <tr v-for="s in sales" :key="s.id">
+                    <td>{{ dt(s.created_at) }}</td>
+                    <td>{{ s.customer_name || '散客' }} <span v-if="s.kind === 'return'" class="badge gray">退货</span></td>
+                    <td class="num" :class="s.kind === 'return' ? 'text-green' : ''">{{ money(s.kind === 'return' ? -(s.total - s.discount) : s.total - s.discount) }}</td>
+                    <td class="num">{{ money(s.paid) }}</td>
+                    <td class="num" :class="s.kind === 'normal' && s.total - s.discount - s.paid > 0 ? 'text-danger' : ''">{{ money(s.kind === 'normal' ? s.total - s.discount - s.paid : 0) }}</td>
+                    <td class="num">{{ s.item_count }}</td>
+                    <td class="text-muted">{{ s.note || '' }}</td>
+                    <td>
+                      <button class="btn-sm" @click="viewOrder('sales', s.id)">查看</button>
+                      <button v-if="s.kind === 'normal'" class="btn-sm" @click="openOrderEdit('sales', s.id)">修改</button>
+                      <button v-if="s.kind === 'normal'" class="btn-sm" @click="openReturn('sales', s.id)">退货</button>
+                      <button class="btn-sm btn-danger" @click="delOrder('sales', s.id)">删除</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <div v-if="!sales.length" class="empty">暂无销售记录</div>
+            </div>
+          </div>
+        </template>
+
+        <!-- ===== 库存查询 ===== -->
+        <template v-else-if="view === 'stock'">
+          <div class="page-title">库存查询</div>
+          <div class="grid-cards">
+            <div class="stat"><div class="label">在用商品</div><div class="value">{{ products.filter(p => !p.archived).length }}</div></div>
+            <div class="stat"><div class="label">库存总价值（按成本）</div><div class="value blue">{{ money(stockValue) }}</div></div>
+            <div class="stat"><div class="label">低库存商品</div><div class="value text-danger">{{ products.filter(p => p.low_stock > 0 && p.stock <= p.low_stock && !p.archived).length }}</div></div>
+          </div>
+          <div class="card">
+            <div class="toolbar" style="justify-content:flex-end">
+              <button class="btn-sm" @click="printStock">打印库存清单</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>商品</th><th>编号</th><th class="num">库存</th><th>单位</th><th class="num">成本均价</th><th class="num">库存价值</th><th class="num">预警阈值</th><th>操作</th></tr></thead>
+                <tbody>
+                  <tr v-for="p in products.filter(p => !p.archived)" :key="p.id">
+                    <td>{{ p.name }} <span v-if="p.no_stock" class="badge blue">服务</span></td>
+                    <td class="text-muted">{{ p.sku || '—' }}</td>
+                    <td class="num">
+                      <span v-if="p.no_stock" class="text-muted">不跟踪</span>
+                      <span v-else :class="{ 'text-danger': p.low_stock > 0 && p.stock <= p.low_stock }">{{ qfmt(p.stock) }}</span>
+                    </td>
+                    <td>{{ p.unit }}</td>
+                    <td class="num">{{ money(p.avg_cost) }}</td>
+                    <td class="num">{{ money(p.no_stock ? 0 : p.stock * p.avg_cost) }}</td>
+                    <td class="num text-muted">{{ p.no_stock ? '—' : qfmt(p.low_stock) }}</td>
+                    <td>
+                      <button v-if="!p.no_stock" class="btn-sm" @click="openAdjust(p)">库存调整</button>
+                      <button class="btn-sm" @click="movesProduct = p.id; loadMoves()">流水</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <div v-if="!products.filter(p => !p.archived).length" class="empty">暂无商品</div>
+            </div>
+          </div>
+          <div class="card">
+            <h3>库存流水</h3>
+            <div class="toolbar">
+              <select v-model="movesProduct" @change="loadMoves" style="width:220px">
+                <option value="">全部商品</option>
+                <option v-for="p in products" :key="p.id" :value="p.id">{{ p.name }}</option>
+              </select>
+              <button class="btn-sm" @click="loadMoves">刷新</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>时间</th><th>商品</th><th>类型</th><th class="num">数量</th><th class="num">单价</th><th>对方 / 原因</th></tr></thead>
+                <tbody>
+                  <tr v-for="(m, i) in moves" :key="i">
+                    <td class="text-muted">{{ dt(m.created_at) }}</td>
+                    <td>{{ (productMap[m.product_id] || {}).name || m.product_id }}</td>
+                    <td><span class="badge" :class="moveSigned(m) >= 0 ? 'green' : 'red'">{{ moveLabel(m) }}</span></td>
+                    <td class="num" :class="moveSigned(m) >= 0 ? 'text-green' : 'text-danger'">{{ moveSigned(m) >= 0 ? '+' : '' }}{{ qfmt(moveSigned(m)) }}</td>
+                    <td class="num">{{ m.price != null ? money(m.price) : '—' }}</td>
+                    <td class="text-muted">{{ m.note || '—' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div v-if="!moves.length" class="empty">暂无流水</div>
+            </div>
+          </div>
+          <div class="card">
+            <h3>调整记录</h3>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>时间</th><th>商品</th><th class="num">数量</th><th>原因</th></tr></thead>
+                <tbody>
+                  <tr v-for="a in adjustments" :key="a.id">
+                    <td class="text-muted">{{ dt(a.created_at) }}</td>
+                    <td>{{ a.product_name }}</td>
+                    <td class="num" :class="a.qty >= 0 ? 'text-green' : 'text-danger'">{{ a.qty >= 0 ? '+' : '' }}{{ qfmt(a.qty) }}</td>
+                    <td class="text-muted">{{ a.reason || '—' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div v-if="!adjustments.length" class="empty">暂无调整记录</div>
+            </div>
+          </div>
+        </template>
+
+        <!-- ===== 资金 ===== -->
+        <template v-else-if="view === 'funds'">
+          <div class="page-title">资金</div>
+          <div class="grid-cards">
+            <div class="stat" v-for="a in accounts" :key="a.id">
+              <div class="label">{{ a.name }}</div>
+              <div class="value" :class="a.balance >= 0 ? 'blue' : 'text-danger'">{{ money(a.balance) }}</div>
+              <div style="margin-top:6px">
+                <button class="btn-sm" @click="openAccountModal(a)">编辑</button>
+                <button class="btn-sm btn-danger" @click="delAccount(a)">删除</button>
+              </div>
+            </div>
+            <div class="stat">
+              <div class="label">账户总余额</div>
+              <div class="value green">{{ money(accountTotal) }}</div>
+              <div style="margin-top:6px"><button class="btn-sm" @click="openAccountModal(null)">＋ 新增账户</button></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="toolbar">
+              <button class="btn-sm btn-primary" @click="openFundModal('receipt')">收款</button>
+              <button class="btn-sm btn-primary" @click="openFundModal('payment')">付款</button>
+              <button class="btn-sm" @click="openFundModal('income')">其他收入</button>
+              <button class="btn-sm" @click="openFundModal('expense')">其他支出</button>
+            </div>
+            <div class="table-wrap">
+              <table class="click-rows">
+                <thead><tr><th>时间</th><th>类型</th><th>往来单位</th><th>金额</th><th>备注</th><th>操作</th></tr></thead>
+                <tbody>
+                  <tr v-for="f in funds" :key="f.type + '-' + f.id" @click="openFundsDetail(f)">
+                    <td class="text-muted">{{ dt(f.created_at) }}</td>
+                    <td><span class="badge" :class="fundSigned(f) >= 0 ? 'green' : 'red'">{{ fundLabel(f.type) }}</span></td>
+                    <td>{{ f.party_name || '—' }}</td>
+                    <td class="num" :class="fundSigned(f) >= 0 ? 'text-green' : 'text-danger'">{{ fundSigned(f) >= 0 ? '+' : '' }}{{ money(fundSigned(f)) }}</td>
+                    <td class="text-muted">{{ f.note || '—' }}</td>
+                    <td>
+                      <button v-if="['receipt','payment','income','expense'].includes(f.type)" class="btn-sm btn-danger" @click.stop="delFund(f)">删除</button>
+                      <span v-else class="text-muted" style="font-size:12px">随单据</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <div v-if="!funds.length" class="empty">暂无资金流水</div>
+            </div>
+          </div>
+        </template>
+
+        <!-- ===== 报表 ===== -->
+        <template v-else-if="view === 'reports'">
+          <div class="page-title">报表</div>
+          <div class="card">
+            <div class="toolbar">
+              <span class="text-muted">从</span>
+              <input type="date" v-model="repFrom" @change="loadReports" style="width:150px" />
+              <span class="text-muted">到</span>
+              <input type="date" v-model="repTo" @change="loadReports" style="width:150px" />
+              <button class="btn-sm" @click="setRepRange('today')">今日</button>
+              <button class="btn-sm" @click="setRepRange('month')">本月</button>
+              <button class="btn-sm" @click="setRepRange('prev')">上月</button>
+              <div style="flex:1"></div>
+              <button class="btn-sm" :disabled="!profit" @click="csvProfit">导出毛利 CSV</button>
+              <button class="btn-sm" :disabled="!summary" @click="csvSummary">导出汇总 CSV</button>
+              <button class="btn-sm" @click="csvDebt">导出欠款 CSV</button>
+              <button class="btn-sm" :disabled="!fundsRep" @click="csvFunds">导出收支 CSV</button>
+              <button class="btn-sm" :disabled="!fundsRep" @click="printFundsList">打印收支明细</button>
+            </div>
+          </div>
+
+          <!-- 毛利报表 -->
+          <div class="sec" :class="{ open: sec.profit }">
+            <div class="sec-head" @click="sec.profit = !sec.profit">
+              <span class="title">毛利报表</span>
+              <span class="sum" v-if="profit">销售额 {{ money(profit.total.revenue) }} · 毛利 {{ money(profit.total.profit) }} · 优惠 {{ money(profit.discount) }} · {{ profit.rows.length }} 个商品有销售</span>
+              <span class="arrow">▶</span>
+            </div>
+            <div class="sec-body" v-show="sec.profit">
+              <template v-if="profit">
+                <div class="grid-cards">
+                  <div class="stat"><div class="label">销售额</div><div class="value blue">{{ money(profit.total.revenue) }}</div></div>
+                  <div class="stat"><div class="label">销售成本</div><div class="value">{{ money(profit.total.cost) }}</div></div>
+                  <div class="stat"><div class="label">整单优惠</div><div class="value text-danger">{{ money(profit.discount) }}</div></div>
+                  <div class="stat"><div class="label">毛利（净）</div><div class="value green">{{ money(profit.total.profit) }}</div></div>
+                  <div class="stat"><div class="label">毛利率</div><div class="value">{{ profit.total.revenue ? ((profit.total.profit / profit.total.revenue) * 100).toFixed(1) + '%' : '—' }}</div></div>
+                </div>
+                <div class="table-wrap">
+                  <table>
+                    <thead><tr><th>商品</th><th class="num">净销量</th><th class="num">销售额</th><th class="num">成本</th><th class="num">毛利</th><th class="num">毛利率</th></tr></thead>
+                    <tbody>
+                      <tr v-for="r in profit.rows" :key="r.product_id">
+                        <td>{{ r.name }}</td>
+                        <td class="num">{{ qfmt(r.qty) }} {{ r.unit }}</td>
+                        <td class="num">{{ money(r.revenue) }}</td>
+                        <td class="num">{{ money(r.cost) }}</td>
+                        <td class="num" :class="r.profit >= 0 ? 'text-green' : 'text-danger'">{{ money(r.profit) }}</td>
+                        <td class="num text-muted">{{ r.revenue ? ((r.profit / r.revenue) * 100).toFixed(1) + '%' : '—' }}</td>
+                      </tr>
+                    </tbody>
+                    <tfoot>
+                      <tr>
+                        <td><strong>毛利合计</strong></td><td></td>
+                        <td class="num">{{ money(profit.total.revenue) }}</td>
+                        <td class="num">{{ money(profit.total.cost) }}</td>
+                        <td class="num">{{ money(profit.total.revenue - profit.total.cost) }}</td>
+                        <td></td>
+                      </tr>
+                      <tr class="text-muted">
+                        <td>整单优惠</td><td></td><td></td><td></td>
+                        <td class="num text-danger">-{{ money(profit.discount) }}</td>
+                        <td></td>
+                      </tr>
+                      <tr>
+                        <td><strong>净毛利（已扣优惠）</strong></td><td></td><td></td><td></td>
+                        <td class="num"><strong :class="profit.total.profit >= 0 ? 'text-green' : 'text-danger'">{{ money(profit.total.profit) }}</strong></td>
+                        <td></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                  <div v-if="!profit.rows.length" class="empty">该时间段没有销售</div>
+                </div>
+                <h3 style="margin:18px 0 10px">按日趋势</h3>
+                <div class="table-wrap">
+                  <table>
+                    <thead><tr><th>日期</th><th class="num">订单数</th><th class="num">销售额</th><th class="num">优惠</th><th class="num">毛利（净）</th></tr></thead>
+                    <tbody>
+                      <tr v-for="d in profit.daily" :key="d.d">
+                        <td>{{ d.d }}</td>
+                        <td class="num">{{ d.orders }}</td>
+                        <td class="num">{{ money(d.revenue) }}</td>
+                        <td class="num text-muted">{{ money(d.discount) }}</td>
+                        <td class="num text-green">{{ money(d.revenue - d.cost - d.discount) }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div v-if="!profit.daily.length" class="empty">该时间段没有销售</div>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- 进销存汇总 -->
+          <div class="sec" :class="{ open: sec.summary }">
+            <div class="sec-head" @click="sec.summary = !sec.summary">
+              <span class="title">进销存汇总</span>
+              <span class="sum" v-if="summary">{{ summary.rows.length }} 个商品 · 期末合计 {{ qfmt(summary.rows.reduce((s, r) => s + r.closing, 0)) }}</span>
+              <span class="arrow">▶</span>
+            </div>
+            <div class="sec-body" v-show="sec.summary">
+              <div class="table-wrap" v-if="summary">
+                <table>
+                  <thead><tr><th>商品</th><th class="num">期初</th><th class="num">采购入库</th><th class="num">采购退货</th><th class="num">销售出库</th><th class="num">销售退货</th><th class="num">盘盈</th><th class="num">盘亏</th><th class="num">期末</th><th>单位</th></tr></thead>
+                  <tbody>
+                    <tr v-for="r in summary.rows" :key="r.product_id">
+                      <td>{{ r.name || (productMap[r.product_id] || {}).name || r.product_id }}</td>
+                      <td class="num">{{ qfmt(r.opening) }}</td>
+                      <td class="num text-green">{{ qfmt(r.purchase_in) }}</td>
+                      <td class="num text-danger">{{ qfmt(r.purchase_return) }}</td>
+                      <td class="num text-danger">{{ qfmt(r.sale_out) }}</td>
+                      <td class="num text-green">{{ qfmt(r.sale_return) }}</td>
+                      <td class="num">{{ qfmt(r.adjust_in) }}</td>
+                      <td class="num">{{ qfmt(r.adjust_out) }}</td>
+                      <td class="num"><strong>{{ qfmt(r.closing) }}</strong></td>
+                      <td>{{ r.unit }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- 往来欠款 -->
+          <div class="sec" :class="{ open: sec.debt }">
+            <div class="sec-head" @click="sec.debt = !sec.debt">
+              <span class="title">往来欠款</span>
+              <span class="sum">客户应收 {{ money(customerDebtTotal) }} · 供应商应付 {{ money(supplierDebtTotal) }}</span>
+              <span class="arrow">▶</span>
+            </div>
+            <div class="sec-body" v-show="sec.debt">
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>类型</th><th>名称</th><th>电话</th><th class="num">当前欠款</th></tr></thead>
+                  <tbody>
+                    <tr v-for="p in parties.filter(x => x.debt)" :key="p.id">
+                      <td><span class="badge" :class="p.type === 'customer' ? 'blue' : 'gray'">{{ p.type === 'customer' ? '客户' : '供应商' }}</span></td>
+                      <td>{{ p.name }}</td>
+                      <td>{{ p.phone || '—' }}</td>
+                      <td class="num">
+                        <span v-if="p.debt > 0" class="text-danger">{{ money(p.debt) }}</span>
+                        <span v-else class="text-green">预收 {{ money(-p.debt) }}</span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+                <div v-if="!parties.filter(x => x.debt).length" class="empty">暂无欠款 🎉</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 其他收支 -->
+          <div class="sec" :class="{ open: sec.funds }">
+            <div class="sec-head" @click="sec.funds = !sec.funds">
+              <span class="title">其他收支</span>
+              <span class="sum" v-if="fundsRep">收入 {{ money(fundsRep.income) }} · 支出 {{ money(fundsRep.expense) }} · 净额 {{ money(fundsRep.income - fundsRep.expense) }} · {{ fundsRep.n }} 笔</span>
+              <span class="arrow">▶</span>
+            </div>
+            <div class="sec-body" v-show="sec.funds">
+              <template v-if="fundsRep">
+                <div class="grid-cards">
+                  <div class="stat"><div class="label">其他收入</div><div class="value green">{{ money(fundsRep.income) }}</div></div>
+                  <div class="stat"><div class="label">其他支出</div><div class="value text-danger">{{ money(fundsRep.expense) }}</div></div>
+                  <div class="stat"><div class="label">净额</div><div class="value" :class="fundsRep.income - fundsRep.expense >= 0 ? 'blue' : 'text-danger'">{{ money(fundsRep.income - fundsRep.expense) }}</div></div>
+                  <div class="stat"><div class="label">笔数</div><div class="value">{{ fundsRep.n }}</div></div>
+                </div>
+                <h3 style="margin:18px 0 10px">
+                  收支明细
+                  <span v-if="fundsDayFilter" class="badge blue" style="cursor:pointer" @click="fundsDayFilter = null" title="清除筛选">{{ fundsDayFilter }} ✕</span>
+                  <span class="text-muted" style="font-size:12px;font-weight:400">点击单笔可查看 / 修改</span>
+                </h3>
+                <div class="table-wrap">
+                  <table class="click-rows">
+                    <thead><tr><th>时间</th><th>类型</th><th>往来单位</th><th>账户</th><th class="num">金额</th><th>备注</th></tr></thead>
+                    <tbody>
+                      <tr v-for="x in fundsListFiltered" :key="x.type + '-' + x.id" @click="openFundsDetail(x)">
+                        <td class="text-muted">{{ dt(x.created_at) }}</td>
+                        <td><span class="badge" :class="x.type === 'income' ? 'green' : 'red'">{{ x.type === 'income' ? '收入' : '支出' }}</span></td>
+                        <td>{{ x.party_name || '—' }}</td>
+                        <td>{{ x.account_name || '—' }}</td>
+                        <td class="num" :class="x.type === 'income' ? 'text-green' : 'text-danger'">{{ x.type === 'income' ? '+' : '' }}{{ money(x.amount) }}</td>
+                        <td class="text-muted">{{ x.note || '—' }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div v-if="!fundsListFiltered.length" class="empty">{{ fundsDayFilter ? '该日没有其他收支' : '该时间段没有其他收支' }}</div>
+                </div>
+                <h3 style="margin:18px 0 10px">按日汇总 <span class="text-muted" style="font-size:12px;font-weight:400">点击日期行可筛选上方明细</span></h3>
+                <div class="table-wrap">
+                  <table class="click-rows">
+                    <thead><tr><th>日期</th><th class="num">收入</th><th class="num">支出</th><th class="num">净额</th><th class="num">笔数</th></tr></thead>
+                    <tbody>
+                      <tr v-for="d in fundsRep.daily" :key="d.d" @click="fundsDayFilter = fundsDayFilter === d.d ? null : d.d" :class="{ 'active-row': fundsDayFilter === d.d }">
+                        <td>{{ d.d }} <span v-if="fundsDayFilter === d.d" class="badge blue">筛选中</span></td>
+                        <td class="num text-green">{{ money(d.income) }}</td>
+                        <td class="num text-danger">{{ money(d.expense) }}</td>
+                        <td class="num"><strong>{{ money(d.income - d.expense) }}</strong></td>
+                        <td class="num text-muted">{{ d.n }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div v-if="!fundsRep.daily.length" class="empty">该时间段没有其他收支</div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+
+        <!-- ===== 往来单位 ===== -->
+        <template v-else-if="view === 'parties'">
+          <div class="page-title">往来单位</div>
+          <div class="card">
+            <div class="toolbar">
+              <button class="btn-sm" :class="partyTab === 'supplier' ? 'btn-primary' : ''" @click="partyTab = 'supplier'">供应商</button>
+              <button class="btn-sm" :class="partyTab === 'customer' ? 'btn-primary' : ''" @click="partyTab = 'customer'">客户</button>
+              <div style="flex:1"></div>
+              <button class="btn-primary" @click="openPartyModal(null)">＋ 新增</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>名称</th><th>电话</th><th class="num">当前欠款</th><th>备注</th><th>操作</th></tr></thead>
+                <tbody>
+                  <tr v-for="p in parties.filter(x => x.type === partyTab)" :key="p.id">
+                    <td>{{ p.name }}</td>
+                    <td>{{ p.phone || '—' }}</td>
+                    <td class="num">
+                      <span v-if="p.debt > 0" class="text-danger">{{ money(p.debt) }}</span>
+                      <span v-else-if="p.debt < 0" class="badge green">预收 {{ money(-p.debt) }}</span>
+                      <span v-else class="text-muted">—</span>
+                    </td>
+                    <td class="text-muted">{{ p.note || '' }}</td>
+                    <td>
+                      <button class="btn-sm" @click="openPartyModal(p)">编辑</button>
+                      <button class="btn-sm btn-danger" @click="delParty(p)">删除</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <div v-if="!parties.filter(x => x.type === partyTab).length" class="empty">暂无数据</div>
+            </div>
+          </div>
+        </template>
+        <!-- ===== 系统设置 ===== -->
+        <template v-else-if="view === 'settings'">
+          <div class="page-header">
+            <div class="page-title">系统设置</div>
+          </div>
+          <div class="settings-grid">
+            <!-- 左列：系统配置与WebDAV -->
+            <div class="settings-col">
+              <!-- WebDAV 远程自动定时备份 -->
+              <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
+                  <h3 style="margin:0">☁️ WebDAV 远程定时自动备份</h3>
+                  <label style="display:flex; align-items:center; gap:6px; margin:0; cursor:pointer">
+                    <input type="checkbox" v-model="webdav.enabled" style="width:auto" />
+                    <span>启用自动备份</span>
+                  </label>
+                </div>
+                <p class="text-muted" style="margin-bottom:14px; font-size:12.5px">
+                  支持坚果云、群晖 NAS、AList 等。启用后 Cloudflare Cron <strong>每天北京时间凌晨 02:00 自动生成全量备份并静默上传</strong>。
+                </p>
+
+                <div v-if="webdav.last_backup_at" style="background:#f8fafc; padding:10px 12px; border-radius:8px; margin-bottom:14px; font-size:12px; border:1px solid var(--line)">
+                  <div>上次备份时间：<strong>{{ dt(webdav.last_backup_at) }}</strong></div>
+                  <div style="margin-top:3px">
+                    状态：
+                    <span class="badge" :class="webdav.last_status === 'success' ? 'green' : 'red'">
+                      {{ webdav.last_status === 'success' ? '成功' : '失败' }}
+                    </span>
+                    <span v-if="webdav.last_error" class="text-danger" style="margin-left:6px">{{ webdav.last_error }}</span>
+                  </div>
+                </div>
+
+                <form @submit.prevent="saveWebDAVConfig">
+                  <div class="form-row">
+                    <label>WebDAV 服务器地址 (URL) *</label>
+                    <input v-model="webdav.url" placeholder="如 https://dav.jianguoyun.com/dav/" />
+                  </div>
+                  <div class="form-grid">
+                    <div>
+                      <label>账号 / 用户名</label>
+                      <input v-model="webdav.username" placeholder="WebDAV 用户名" />
+                    </div>
+                    <div>
+                      <label>密码 / 应用授权码</label>
+                      <input type="password" v-model="webdav.password" placeholder="留空保持原密码" />
+                    </div>
+                  </div>
+                  <div class="form-row" style="margin-top:12px">
+                    <label>远程存储目录</label>
+                    <input v-model="webdav.remote_dir" placeholder="默认 /erp-backups" />
+                  </div>
+                  <div style="margin-top:16px; display:flex; justify-content:space-between; align-items:center">
+                    <button type="button" class="btn-sm" :disabled="webdavTesting || !webdav.url" @click="testAndBackupWebDAV">
+                      {{ webdavTesting ? '正在上传中...' : '立即测试并上传备份' }}
+                    </button>
+                    <button class="btn-primary" type="submit">保存配置</button>
+                  </div>
+                </form>
+              </div>
+
+              <!-- 公司与系统配置 -->
+              <div class="card">
+                <h3>🏢 公司与系统配置</h3>
+                <p class="text-muted" style="margin-bottom:14px; font-size:12.5px">设置系统标题、公司名称、联系方式等，将应用于打印小票页眉和页脚。</p>
+                <form @submit.prevent="saveCompanyConfig">
+                  <div class="form-row">
+                    <label>系统标题（页面标题）</label>
+                    <input v-model="company.app_title" placeholder="如：XX电脑进销存" />
+                  </div>
+                  <div class="form-grid">
+                    <div>
+                      <label>公司名称</label>
+                      <input v-model="company.company_name" placeholder="公司全称" />
+                    </div>
+                    <div>
+                      <label>联系电话</label>
+                      <input v-model="company.company_phone" placeholder="客服电话" />
+                    </div>
+                  </div>
+                  <div class="form-row">
+                    <label>公司地址</label>
+                    <input v-model="company.company_address" placeholder="公司注册地址" />
+                  </div>
+                  <div class="form-grid">
+                    <div>
+                      <label>联系人</label>
+                      <input v-model="company.company_contact" placeholder="联系人姓名" />
+                    </div>
+                    <div>
+                      <label>小票底部备注</label>
+                      <input v-model="company.print_footer_note" placeholder="如：诚信服务 · 品质保证" />
+                    </div>
+                  </div>
+                  <div style="margin-top:16px; display:flex; justify-content:flex-end">
+                    <button class="btn-primary" type="submit">保存系统配置</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            <!-- 右列：用户管理与业务操作 -->
+            <div class="settings-col">
+              <!-- 用户管理 -->
+              <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
+                  <h3 style="margin:0">👥 用户账号管理</h3>
+                  <button class="btn-primary btn-sm" @click="openUserModal(null)">＋ 新增用户</button>
+                </div>
+                <p class="text-muted" style="margin-bottom:14px; font-size:12.5px">
+                  支持多级角色：管理员、普通员工、销售/收银员。可配置访问权限，禁用/启用账号。密码存储为 SHA-256 哈希。
+                </p>
+                <div class="table-wrap" v-if="userList.length">
+                  <table>
+                    <thead><tr><th>用户名</th><th>姓名</th><th>角色</th><th>状态</th><th>电话</th><th>权限</th><th>操作</th></tr></thead>
+                    <tbody>
+                      <tr v-for="u in userList" :key="u.id">
+                        <td><strong>{{ u.username }}</strong></td>
+                        <td>{{ u.name }}</td>
+                        <td><span class="badge" :class="u.role === 'admin' ? 'blue' : u.role === 'sales' ? 'green' : 'gray'">{{ roleLabel(u.role) }}</span></td>
+                        <td><span class="badge" :class="u.status ? 'green' : 'red'">{{ u.status ? '正常' : '已禁用' }}</span></td>
+                        <td>{{ u.phone || '—' }}</td>
+                        <td class="text-muted" style="font-size:12px">{{ Array.isArray(u.permissions) ? u.permissions.join(', ') : '—' }}</td>
+                        <td>
+                          <button class="btn-sm" @click="openUserModal(u)">编辑</button>
+                          <button class="btn-sm btn-danger" @click="delUser(u)">删除</button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div v-else class="empty" style="padding:16px">暂无用户数据</div>
+              </div>
+
+              <!-- 数据维护与备份 -->
+              <div class="card">
+                <h3>💾 数据维护与备份</h3>
+                <p class="text-muted" style="margin-bottom:14px; font-size:12.5px">全量 JSON 备份包含商品、客户、供应商、订单、资金流水、用户及系统配置。</p>
+                <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px">
+                  <button class="btn-primary" :disabled="backupLoading" @click="downloadBackup">
+                    {{ backupLoading ? '处理中...' : '下载全量备份文件' }}
+                  </button>
+                  <button :disabled="backupLoading" @click="triggerImportFile">
+                    上传备份文件并还原
+                  </button>
+                  <input id="backup-file-input" type="file" accept=".json,application/json" style="display:none" @change="onBackupFileSelected" />
+                </div>
+                <div style="margin-bottom:12px">
+                  <button class="btn-sm" @click="api('/admin/recompute').then(() => toast('已重算')).catch(e => toast(e.message, 'err'))">立即重算流水</button>
+                </div>
+                <div style="padding:12px; background:#fff5f5; border:1px solid #fecaca; border-radius:8px">
+                  <p class="text-muted" style="font-size:12px; margin-bottom:8px">⚠️ 危险区域：一键清空全部业务数据（保留空表结构），执行前建议先下载备份！</p>
+                  <input v-model="clearInputText" placeholder="输入「确认清空全部数据」" style="width:100%; margin-bottom:8px; padding:6px 8px; border:1px solid var(--line); border-radius:var(--radius-sm)" />
+                  <button class="btn-danger btn-large-danger" :disabled="backupLoading || clearInputText !== '确认清空全部数据'" @click="clearAllData">
+                    清空全部业务数据
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+      </main>
+    </div>
+
+    <!-- 商品弹窗 -->
+    <div class="modal-mask" v-if="prodModal" @click.self="prodModal = null">
+      <div class="modal">
+        <h3>{{ prodModal.id ? '编辑商品' : '新增商品' }}</h3>
+        <div class="form-grid">
+          <div><label>名称 *</label><input v-model="prodModal.name" placeholder="商品名称" /></div>
+          <div><label>编号 SKU</label><input v-model="prodModal.sku" placeholder="自动顺排，可修改" /></div>
+          <div><label>条码</label><input v-model="prodModal.barcode" placeholder="可选" /></div>
+          <div><label>类别</label><input v-model="prodModal.category" placeholder="如 饮料 / 零食" list="cat-list" /></div>
+          <div><label>单位</label><input v-model="prodModal.unit" placeholder="件 / 千克 / 箱" /></div>
+          <template v-if="!prodModal.id && !prodModal.no_stock">
+            <div><label>期初库存</label><input type="number" min="0" step="any" v-model.number="prodModal.initial_stock" placeholder="默认 0" /></div>
+            <div><label>期初单价（成本）</label><input type="number" min="0" step="0.01" v-model.number="prodModal.initial_cost" placeholder="默认 0" /></div>
+          </template>
+          <div><label>建议售价</label><input type="number" min="0" step="0.01" v-model.number="prodModal.sale_price" /></div>
+          <div v-if="!prodModal.no_stock"><label>低库存阈值</label><input type="number" min="0" step="any" v-model.number="prodModal.low_stock" placeholder="0 为不预警" /></div>
+        </div>
+        <div v-if="prodModal.id && !prodModal.no_stock" class="form-row" style="margin-top:12px">
+          <label>
+            成本均价（当前 {{ money(prodModal._origAvg) }}）
+            <a v-if="prodModal.cost_manual || prodModal._restoring" style="margin-left:8px" @click="restoreAutoCost">恢复自动</a>
+          </label>
+          <input type="number" min="0" step="0.01" v-model.number="prodModal.avg_cost" />
+          <div class="text-muted" style="font-size:12px;margin-top:4px">
+            {{ prodModal._restoring ? '保存后恢复为按采购流水自动重算' : (prodModal.cost_manual ? '当前为手动指定成本；改价后继续保持锁定' : '通常无需修改；改价后成本将锁定，不再随采购自动重算') }}
+          </div>
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;margin-top:12px;font-size:13px;color:var(--muted)">
+          <input type="checkbox" v-model="prodModal.no_stock" style="width:auto" />
+          服务类商品（维修、服务费等，不跟踪库存，只能销售不能采购）
+        </label>
+        <datalist id="cat-list"><option v-for="cst in categories" :key="cst" :value="cst" /></datalist>
+        <label v-if="prodModal.id" style="display:flex;align-items:center;gap:6px;margin-top:12px;font-size:13px;color:var(--muted)">
+          <input type="checkbox" v-model="prodModal.archived" style="width:auto" /> 停用（不再出现在下单选择中）
+        </label>
+        <div class="modal-foot">
+          <button @click="prodModal = null">取消</button>
+          <button class="btn-primary" @click="saveProduct">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 库存调整弹窗 -->
+    <div class="modal-mask" v-if="adjustModal" @click.self="adjustModal = null">
+      <div class="modal" style="max-width:420px">
+        <h3>库存调整 — {{ adjustModal.product.name }}</h3>
+        <p class="text-muted" style="margin-bottom:12px">当前库存：{{ qfmt(adjustModal.product.stock) }} {{ adjustModal.product.unit }}</p>
+        <div class="form-row">
+          <label>调整数量（正数盘盈，负数盘亏）</label>
+          <input type="number" step="any" v-model.number="adjustModal.qty" placeholder="如 +2 或 -1" />
+        </div>
+        <div class="form-row">
+          <label>原因</label>
+          <input v-model="adjustModal.reason" placeholder="盘点、破损、赠品等" />
+        </div>
+        <div class="modal-foot">
+          <button @click="adjustModal = null">取消</button>
+          <button class="btn-primary" @click="saveAdjust">确认调整</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 单据详情弹窗 -->
+    <div class="modal-mask" v-if="orderDetail" @click.self="orderDetail = null">
+      <div class="modal">
+        <h3>
+          {{ orderDetail.kind === 'return' ? '退货' : '' }}{{ orderDetailType === 'purchase' ? '采购单' : '销售单' }} #{{ orderDetail.id }} · {{ dt(orderDetail.created_at) }}
+        </h3>
+        <p style="margin-bottom:12px">
+          <span class="text-muted">{{ orderDetailType === 'purchase' ? '供应商' : '客户' }}：</span>{{ orderDetailType === 'purchase' ? (orderDetail.supplier_name || '—') : (orderDetail.customer_name || '散客') }}
+          <span v-if="orderDetail.note" class="text-muted">　备注：{{ orderDetail.note }}</span>
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>商品</th><th class="num">数量</th><th class="num">单价</th><th class="num">小计</th>
+                <th v-if="orderDetailType === 'sales'" class="num">毛利</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="it in orderDetail.items" :key="it.id">
+                <td>{{ it.product_name }}<span class="text-muted">{{ it.sku ? '（' + it.sku + '）' : '' }}</span></td>
+                <td class="num">{{ qfmt(it.qty) }} {{ it.unit }}</td>
+                <td class="num">{{ money(orderDetailType === 'purchase' ? it.unit_cost : it.unit_price) }}</td>
+                <td class="num">{{ money(orderDetailType === 'purchase' ? it.qty * it.unit_cost : it.qty * it.unit_price) }}</td>
+                <td v-if="orderDetailType === 'sales'" class="num" :class="orderDetail.kind === 'return' ? 'text-danger' : 'text-green'">{{ money((orderDetail.kind === 'return' ? -1 : 1) * (it.unit_price - it.unit_cost) * it.qty) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="total-line">
+          <span class="text-muted">合计 {{ money(orderDetail.total) }}</span>
+          <span class="text-muted">优惠 {{ money(orderDetail.discount) }}</span>
+          <strong>净额 {{ money(orderDetail.total - orderDetail.discount) }}</strong>
+          <span class="text-muted">{{ orderDetail.kind === 'return' ? '退款' : '已' + (orderDetailType === 'purchase' ? '付' : '收') }} {{ money(orderDetail.paid) }}</span>
+        </div>
+        <div class="modal-foot">
+          <button class="btn-primary" @click="printOrderDetail">打印单据</button>
+          <button @click="orderDetail = null">关闭</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 退货弹窗 -->
+    <div class="modal-mask" v-if="returnModal" @click.self="returnModal = null">
+      <div class="modal">
+        <h3>{{ returnModal.kind === 'sales' ? '销售退货' : '采购退货' }}（原单 #{{ returnModal.sourceId }} · {{ returnModal.party }}）</h3>
+        <div class="table-wrap">
+          <table class="items-edit">
+            <thead><tr><th>商品</th><th>退货数量</th><th>单价</th><th class="num">小计</th></tr></thead>
+            <tbody>
+              <tr v-for="(it, i) in returnModal.items" :key="i">
+                <td>{{ it.name }}</td>
+                <td><input type="number" min="0" :max="it.maxQty" step="any" v-model.number="it.qty" style="width:95px" /></td>
+                <td>{{ money(it.price) }}</td>
+                <td class="num">{{ money(it.qty * it.price) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="form-grid" style="margin-top:12px">
+          <div>
+            <label>退款方式</label>
+            <select v-model="returnModal.refund_way">
+              <option value="debt">冲减欠款</option>
+              <option value="account">退到账户{{ returnModal.kind === 'sales' ? '（账户支出）' : '（账户收入）' }}</option>
+            </select>
+          </div>
+          <div v-if="returnModal.refund_way === 'account'">
+            <label>结算账户</label>
+            <select v-model="returnModal.account_id">
+              <option value="">选择账户</option>
+              <option v-for="a in accounts" :key="a.id" :value="a.id">{{ a.name }}（{{ money(a.balance) }}）</option>
+            </select>
+          </div>
+          <div><label>备注</label><input v-model="returnModal.note" /></div>
+        </div>
+        <div class="total-line">
+          <strong>退货合计 {{ money(returnTotal()) }}</strong>
+          <button class="btn-primary" :disabled="submitting" @click="submitReturn">确认退货</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 资金流水弹窗 -->
+    <div class="modal-mask" v-if="fundModal" @click.self="fundModal = null">
+      <div class="modal" style="max-width:440px">
+        <h3>{{ fundLabel(fundModal.type) }}</h3>
+        <div class="form-row">
+          <label>{{ fundPartyLabel(fundModal.type) }}</label>
+          <select v-model="fundModal.party_id">
+            <option value="">{{ fundModal.type === 'receipt' || fundModal.type === 'payment' ? '选择往来单位' : '— 不关联 —' }}</option>
+            <option v-for="p in fundPartyList(fundModal.type)" :key="p.id" :value="p.id">
+              {{ p.name }}{{ debtLabel(p) ? '（' + debtLabel(p) + '）' : '' }}
+            </option>
+          </select>
+          <p class="text-muted" style="font-size:12px;margin-top:4px">
+            <template v-if="fundModal.type === 'receipt'">收款单用于核销客户欠款；客户没有欠款时收款会计为预收（多付）。</template>
+            <template v-else-if="fundModal.type === 'payment'">付款单用于核销供应商欠款；没有欠款时付款会计为预付。</template>
+            <template v-else>其他收入/支出是纯收支，不影响欠款；关联往来单位仅作备忘。</template>
+          </p>
+        </div>
+        <div class="form-row">
+          <label>结算账户 *</label>
+          <select v-model="fundModal.account_id">
+            <option value="">选择账户</option>
+            <option v-for="a in accounts" :key="a.id" :value="a.id">{{ a.name }}（{{ money(a.balance) }}）</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label>金额 *</label>
+          <input type="number" min="0" step="0.01" v-model.number="fundModal.amount" />
+        </div>
+        <div class="form-row">
+          <label>备注</label>
+          <input v-model="fundModal.note" placeholder="如：电脑维修" />
+        </div>
+        <div class="modal-foot">
+          <button @click="fundModal = null">取消</button>
+          <button class="btn-primary" @click="saveFund">确认入账</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 账户弹窗 -->
+    <div class="modal-mask" v-if="accountModal" @click.self="accountModal = null">
+      <div class="modal" style="max-width:400px">
+        <h3>{{ accountModal.id ? '编辑账户' : '新增账户' }}</h3>
+        <div class="form-row"><label>名称 *</label><input v-model="accountModal.name" placeholder="现金 / 微信 / 支付宝 / 银行卡" /></div>
+        <div class="form-row"><label>期初余额</label><input type="number" min="0" step="0.01" v-model.number="accountModal.opening_balance" /></div>
+        <div class="form-row"><label>备注</label><input v-model="accountModal.note" /></div>
+        <p class="text-muted" style="font-size:12px">修改期初余额后，当前余额将自动按全部流水重算。</p>
+        <div class="modal-foot">
+          <button @click="accountModal = null">取消</button>
+          <button class="btn-primary" @click="saveAccount">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 往来单位弹窗 -->
+    <div class="modal-mask" v-if="partyModal" @click.self="partyModal = null">
+      <div class="modal" style="max-width:420px">
+        <h3>{{ partyModal.id ? '编辑往来单位' : '新增往来单位' }}</h3>
+        <div class="form-row">
+          <label>类型</label>
+          <select v-model="partyModal.type" :disabled="!!partyModal.id">
+            <option value="supplier">供应商</option>
+            <option value="customer">客户</option>
+          </select>
+        </div>
+        <div class="form-row"><label>名称 *</label><input v-model="partyModal.name" /></div>
+        <div class="form-row"><label>电话</label><input v-model="partyModal.phone" /></div>
+        <div class="form-row"><label>地址</label><input v-model="partyModal.address" /></div>
+        <div class="form-row"><label>联系人</label><input v-model="partyModal.contact_man" /></div>
+        <div class="form-row">
+          <label>期初欠款{{ partyModal.type === 'customer' ? '（该客户欠你）' : '（你欠该供应商）' }}</label>
+          <input type="number" min="0" step="0.01" v-model.number="partyModal.opening_debt" />
+        </div>
+        <div class="form-row"><label>备注</label><input v-model="partyModal.note" /></div>
+        <div class="modal-foot">
+          <button @click="partyModal = null">取消</button>
+          <button class="btn-primary" @click="saveParty">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 用户管理弹窗 -->
+    <div class="modal-mask" v-if="userModal" @click.self="userModal = null">
+      <div class="modal" style="max-width:520px">
+        <h3>{{ userModal.id ? '编辑用户' : '新增用户' }}</h3>
+        <div class="form-grid">
+          <div><label>用户名 *</label><input v-model="userModal.username" :disabled="!!userModal.id" placeholder="登录账号，仅支持字母/数字/中文" /></div>
+          <div><label>姓名 *</label><input v-model="userModal.name" placeholder="真实姓名或昵称" /></div>
+        </div>
+        <div class="form-row" v-if="!userModal.id">
+          <label>初始密码 *</label>
+          <input type="password" v-model="userModal.password" placeholder="至少 4 位" minlength="4" />
+        </div>
+        <div class="form-row" v-else>
+          <label>重置密码（留空不修改）</label>
+          <input type="password" v-model="userModal.password" placeholder="输入新密码以重置" minlength="4" />
+        </div>
+        <div class="form-grid">
+          <div><label>角色</label>
+            <select v-model="userModal.role">
+              <option value="admin">超级管理员（全部权限）</option>
+              <option value="staff">普通员工（次级）</option>
+              <option value="sales">销售/收银员</option>
+            </select>
+          </div>
+          <div><label>状态</label>
+            <select v-model="userModal.status">
+              <option :value="1">正常</option>
+              <option :value="0">已禁用</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row" style="margin-top:8px">
+          <label>业务权限（普通员工/销售适用，管理员自动拥有全部）</label>
+          <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:4px">
+            <label style="display:flex;align-items:center;gap:4px;font-weight:400;cursor:pointer">
+              <input type="checkbox" :checked="userModal.permissions.includes('products')" @change="togglePerm('products')" /> 商品管理
+            </label>
+            <label style="display:flex;align-items:center;gap:4px;font-weight:400;cursor:pointer">
+              <input type="checkbox" :checked="userModal.permissions.includes('sales')" @change="togglePerm('sales')" /> 销售/采购单
+            </label>
+            <label style="display:flex;align-items:center;gap:4px;font-weight:400;cursor:pointer">
+              <input type="checkbox" :checked="userModal.permissions.includes('stock')" @change="togglePerm('stock')" /> 库存调整
+            </label>
+            <label style="display:flex;align-items:center;gap:4px;font-weight:400;cursor:pointer">
+              <input type="checkbox" :checked="userModal.permissions.includes('funds')" @change="togglePerm('funds')" /> 其他收支
+            </label>
+            <label style="display:flex;align-items:center;gap:4px;font-weight:400;cursor:pointer">
+              <input type="checkbox" :checked="userModal.permissions.includes('reports')" @change="togglePerm('reports')" /> 报表
+            </label>
+          </div>
+        </div>
+        <div class="form-grid">
+          <div><label>电话</label><input v-model="userModal.phone" /></div>
+          <div><label>备注</label><input v-model="userModal.note" /></div>
+        </div>
+        <div class="modal-foot">
+          <button @click="userModal = null">取消</button>
+          <button class="btn-primary" @click="saveUser">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 单笔收支详情/编辑弹窗 -->
+    <div class="modal-mask" v-if="fundsDetail" @click.self="fundsDetail = null">
+      <div class="modal" style="max-width:440px">
+        <template v-if="fundsEditable(fundsDetail)">
+          <h3>{{ fundLabel(fundsForm.type) }} · 单笔可修改</h3>
+          <div class="form-row">
+            <label>类型</label>
+            <select v-model="fundsForm.type">
+              <option value="income">其他收入</option>
+              <option value="expense">其他支出</option>
+              <option value="receipt">收款</option>
+              <option value="payment">付款</option>
+            </select>
+          </div>
+          <div class="form-row" v-if="fundsForm.type === 'receipt' || fundsForm.type === 'payment' || fundsForm.type === 'income' || fundsForm.type === 'expense'">
+            <label>{{ fundPartyLabel(fundsForm.type) }}</label>
+            <select v-model="fundsForm.party_id">
+              <option value="">{{ fundsForm.type === 'receipt' || fundsForm.type === 'payment' ? '选择往来单位' : '— 不关联 —' }}</option>
+              <option v-for="p in fundPartyList(fundsForm.type)" :key="p.id" :value="p.id">
+                {{ p.name }}{{ debtLabel(p) ? '（' + debtLabel(p) + '）' : '' }}
+              </option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>结算账户 *</label>
+            <select v-model="fundsForm.account_id">
+              <option v-for="a in accounts" :key="a.id" :value="a.id">{{ a.name }}（{{ money(a.balance) }}）</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>金额 *</label>
+            <input type="number" min="0" step="0.01" v-model.number="fundsForm.amount" />
+          </div>
+          <div class="form-row">
+            <label>备注</label>
+            <input v-model="fundsForm.note" />
+          </div>
+          <div class="modal-foot">
+            <button class="btn-danger" @click="delFundsRow">删除</button>
+            <button @click="fundsDetail = null">取消</button>
+            <button class="btn-primary" @click="saveFundsRow">保存</button>
+          </div>
+        </template>
+        <template v-else>
+          <h3>{{ fundLabel(fundsDetail.type) }} · {{ money(fundsDetail.amount) }}</h3>
+          <table style="width:100%; margin-bottom:6px">
+            <tbody>
+              <tr><td class="text-muted" style="width:80px">时间</td><td>{{ dt(fundsDetail.created_at) }}</td></tr>
+              <tr><td class="text-muted">往来单位</td><td>{{ fundsDetail.party_name || '—' }}</td></tr>
+              <tr><td class="text-muted">结算账户</td><td>{{ fundsDetail.account_name || '—' }}</td></tr>
+              <tr><td class="text-muted">备注</td><td>{{ fundsDetail.note || '—' }}</td></tr>
+            </tbody>
+          </table>
+          <p class="text-muted" style="font-size:12px">此流水随单据产生，不能单独修改；如需调整请删除或修改对应单据。</p>
+          <div class="modal-foot"><button @click="fundsDetail = null">关闭</button></div>
+        </template>
+      </div>
+    </div>
+
+    <!-- 单据修改弹窗（采购/销售） -->
+    <div class="modal-mask" v-if="orderEdit" @click.self="orderEdit = null">
+      <div class="modal" style="max-width:760px">
+        <h3>修改{{ orderEdit.kind === 'sales' ? '销售单' : '采购单' }} #{{ orderEdit.id }}</h3>
+        <div class="form-grid" style="margin-bottom:12px">
+          <div>
+            <label>{{ orderEdit.kind === 'sales' ? '客户' : '供应商' }}</label>
+            <select v-model="orderEdit.party_id">
+              <option value="">— 手动输入 —</option>
+              <option v-for="p in (orderEdit.kind === 'sales' ? customers : suppliers)" :key="p.id" :value="p.id">
+                {{ p.name }}{{ debtLabel(p) ? '（' + debtLabel(p) + '）' : '' }}
+              </option>
+            </select>
+          </div>
+          <div v-if="!orderEdit.party_id">
+            <label>{{ orderEdit.kind === 'sales' ? '客户' : '供应商' }}名称（手动）</label>
+            <input v-model="orderEdit.name_free" />
+          </div>
+          <div>
+            <label>结算账户</label>
+            <select v-model="orderEdit.account_id">
+              <option value="">— 未设置 —</option>
+              <option v-for="a in accounts" :key="a.id" :value="a.id">{{ a.name }}（{{ money(a.balance) }}）</option>
+            </select>
+          </div>
+          <div>
+            <label>备注</label>
+            <input v-model="orderEdit.note" />
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="items-edit">
+            <thead>
+              <tr>
+                <th style="min-width:220px">商品</th>
+                <th>数量</th>
+                <th>{{ orderEdit.kind === 'sales' ? '售价' : '进价' }}</th>
+                <th class="num">小计</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(it, i) in orderEdit.items" :key="i">
+                <td>
+                  <product-picker v-model="it.product_id" :products="orderEdit.kind === 'sales' ? activeProducts : purchasableProducts" :mode="orderEdit.kind" @update:model-value="onProductChangeEdit(it, $event)" />
+                </td>
+                <td><input type="number" min="0" step="any" v-model.number="it.qty" style="width:95px" /></td>
+                <td><input type="number" min="0" step="0.01" v-model.number="it.price" style="width:115px" /></td>
+                <td class="num">{{ money(it.qty * it.price) }}</td>
+                <td><button class="del-row" @click="delRowEdit(i)">×</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="form-grid" style="margin:12px 0">
+          <div><label>整单优惠</label><input type="number" min="0" step="0.01" v-model.number="orderEdit.discount" /></div>
+          <div><label>{{ orderEdit.kind === 'sales' ? '本次收款' : '本次付款' }}</label><input type="number" min="0" step="0.01" v-model.number="orderEdit.paid" /></div>
+        </div>
+        <div class="total-line">
+          <span class="text-muted">合计 {{ money(orderEdit.items.reduce((s, it) => s + Number(it.qty||0)*Number(it.price||0), 0)) }}</span>
+          <span class="text-muted">净额 {{ money(Math.max(0, orderEdit.items.reduce((s, it) => s + Number(it.qty||0)*Number(it.price||0), 0) - Number(orderEdit.discount||0))) }}</span>
+          <button @click="addRowEdit">＋ 加一行</button>
+          <button @click="orderEdit = null">取消</button>
+          <button class="btn-primary" :disabled="submitting" @click="saveOrderEdit">保存修改</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 打印预览 / 打印纸弹窗 -->
+    <div class="modal-mask print-modal-mask" v-if="printDoc" @click.self="printDoc = null">
+      <div class="modal print-sheet">
+        <div class="no-print" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
+          <span class="text-muted">打印预览（A4 / 票据打印机自适应）</span>
+          <div>
+            <button class="btn-primary" @click="doPrint">立即打印</button>
+            <button @click="printDoc = null" style="margin-left:8px">关闭</button>
+          </div>
+        </div>
+
+        <!-- 真正被打印的纸张区域 -->
+        <div class="printable">
+          <div class="print-header">
+            <h2>{{ company.company_name || '企业出库单' }} · {{ printDoc.title }}</h2>
+            <div class="print-no" v-if="printDoc.no">{{ printDoc.no }}</div>
+          </div>
+          <div class="print-meta" v-if="printDoc.meta">
+            <div v-for="([k, v], i) in printDoc.meta" :key="i">
+              <span class="text-muted">{{ k }}：</span><strong>{{ v }}</strong>
+            </div>
+          </div>
+
+          <table v-if="printDoc.table" class="print-table">
+            <thead>
+              <tr><th v-for="h in printDoc.table.head" :key="h">{{ h }}</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="(r, i) in printDoc.table.rows" :key="i">
+                <td v-for="(c, j) in r" :key="j" :class="{ 'text-right': j >= r.length - 3 }">{{ c }}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="print-totals" v-if="printDoc.totals">
+            <div v-for="([k, v], i) in printDoc.totals" :key="i">
+              <span class="text-muted">{{ k }}：</span><strong style="font-size:15px">{{ v }}</strong>
+            </div>
+          </div>
+
+          <div class="print-footer">
+            <div class="sign-block">
+              <span>经手人：_____________</span>
+              <span v-if="printDoc.sign" style="margin-left:32px">{{ printDoc.sign }}：_____________</span>
+            </div>
+            <div class="print-note">{{ company.print_footer_note || '诚信服务 · 品质保证' }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 全局提示 -->
+    <div v-if="toastMsg" class="toast" :class="toastType">{{ toastMsg }}</div>
+  </script>
+
+  <script src="/vendor/vue.global.prod.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
