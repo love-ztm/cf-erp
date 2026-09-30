@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Cloud ERP 进销存</title>
+  <link rel="icon" type="image/svg+xml" href="/logo.svg?v=BUILD_VERSION" />
+  <link rel="apple-touch-icon" href="/logo.svg?v=BUILD_VERSION" />
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
@@ -21,6 +23,7 @@
     <!-- 登录页 -->
     <div v-else-if="!loggedIn" class="login-wrap">
       <div class="login-box">
+        <img src="/logo.svg?v=BUILD_VERSION" alt="logo" class="login-logo" />
         <h1>{{ company.app_title || 'Cloud ERP 进销存' }}</h1>
         <p>{{ company.company_name || '企业进销存管理系统' }} · 进销存 · 资金 · 报表</p>
         <form @submit.prevent="login">
@@ -42,8 +45,11 @@
     <div v-else class="layout">
       <aside class="sidebar">
         <div class="logo">
-          <span>{{ company.app_title || 'Cloud ERP' }}</span>
-          <small>{{ company.company_name || '进销存管理系统' }}</small>
+          <img src="/logo.svg?v=BUILD_VERSION" alt="logo" class="logo-img" />
+          <div>
+            <span>{{ company.app_title || 'Cloud ERP' }}</span>
+            <small>{{ company.company_name || '进销存管理系统' }}</small>
+          </div>
         </div>
         <nav class="nav">
           <a v-for="n in nav" :key="n.key" v-show="navVisible(n)" :class="{ active: view === n.key }" @click="go(n.key)">
