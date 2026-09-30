@@ -1,0 +1,27 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cf-erp",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-09-01",
+  "rules": [{ "type": "Text", "globs": ["**/*.sql"], "fallthrough": true }],
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  // 账号1（xydn-djy@qq.com）的 D1 数据库
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "cf-erp",
+      "database_id": "b69ac3fc-14c1-4fb8-b9ac-be3eafa66ff0"
+    }
+  ],
+  "vars": {
+    "ADMIN_PASSWORD": "admin123"
+  },
+  "triggers": {
+    "crons": ["0 18 * * *"]
+  }
+}
