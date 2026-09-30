@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { generateBackupPayload, type BackupData } from './backup'
+import { generateBackupPayload, importBackupData, type BackupData } from './backup'
 import { requireAdmin } from './auth'
 
 const app = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>()
@@ -172,6 +172,121 @@ app.post('/settings/webdav/test', requireAdmin, async (c) => {
     return c.json({ error: r.error || '备份失败' }, 422)
   }
   return c.json({ ok: true, filename: r.filename })
+})
+
+// ===== WebDAV 辅助：URL 与鉴权 =====
+function webdavBase(cfg: WebDAVConfig): { baseUrl: string; auth: string; cleanDir: string } {
+  let baseUrl = cfg.url.trim()
+  if (!baseUrl.endsWith('/')) baseUrl += '/'
+  const auth = 'Basic ' + btoa(`${cfg.username}:${cfg.password}`)
+  const cleanDir = cfg.remote_dir ? cfg.remote_dir.replace(/^\/+|\/+$/g, '') + '/' : ''
+  return { baseUrl, auth, cleanDir }
+}
+
+// 解析 PROPFIND 返回的 multistatus XML（用正则提取文件 href / 大小 / 修改时间）
+function parseMultistatus(xml: string): Array<{ name: string; size: number; modified: string }> {
+  const items: Array<{ name: string; size: number; modified: string }> = []
+  const respRe = /<response>([\s\S]*?)<\/response>/g
+  let m: RegExpExecArray | null
+  while ((m = respRe.exec(xml)) !== null) {
+    const block = m[1]
+    const hrefMatch = block.match(/<href>([\s\S]*?)<\/href>/)
+    if (!hrefMatch) continue
+    let href = hrefMatch[1].trim()
+    if (href.startsWith('<![CDATA[')) href = href.replace(/^<!\[CDATA\[|\]\]>$/g, '')
+    // 取最后一段作为文件名，并反转义 %XX
+    const name = decodeURIComponent(href.split('/').filter(Boolean).pop() || '')
+    if (!name || !name.toLowerCase().endsWith('.json')) continue
+    const sizeMatch = block.match(/<getcontentlength>([\s\S]*?)<\/getcontentlength>/)
+    const modMatch = block.match(/<getlastmodified>([\s\S]*?)<\/getlastmodified>/)
+    items.push({
+      name,
+      size: sizeMatch ? parseInt(sizeMatch[1].trim(), 10) || 0 : 0,
+      modified: modMatch ? modMatch[1].trim() : '',
+    })
+  }
+  return items
+}
+
+// 列出 WebDAV 远程目录中的备份文件（仅管理员）
+app.post('/settings/webdav/list', requireAdmin, async (c) => {
+  const cfg = await getWebDAVConfig(c.env.DB)
+  if (!cfg.url) return c.json({ error: '尚未配置 WebDAV 服务器地址' }, 422)
+  const { baseUrl, auth, cleanDir } = webdavBase(cfg)
+
+  const dirUrl = new URL(cleanDir, baseUrl).toString()
+  try {
+    const res = await fetch(dirUrl, {
+      method: 'PROPFIND',
+      headers: {
+        Authorization: auth,
+        Depth: '1',
+        'Content-Type': 'application/xml',
+      },
+      body: `<?xml version="1.0" encoding="utf-8"?>
+<d:propfind xmlns:d="DAV:">
+  <d:prop>
+    <d:getlastmodified/>
+    <d:getcontentlength/>
+    <d:displayname/>
+  </d:prop>
+</d:propfind>`,
+    })
+
+    if (res.status === 401 || res.status === 403) {
+      return c.json({ error: 'WebDAV 认证失败，请检查账号与应用授权码' }, 422)
+    }
+    if (!res.ok) {
+      return c.json({ error: `WebDAV 列出目录失败：HTTP ${res.status} ${res.statusText}`, files: [] }, 200)
+    }
+
+    const xml = await res.text()
+    const files = parseMultistatus(xml)
+      .sort((a, b) => (a.modified < b.modified ? 1 : -1))
+    return c.json({ ok: true, files })
+  } catch (err: any) {
+    return c.json({ error: `WebDAV 连接失败：${err?.message || String(err)}`, files: [] }, 200)
+  }
+})
+
+// 从 WebDAV 下载指定备份并还原（全量覆盖，仅管理员）
+app.post('/settings/webdav/restore', requireAdmin, async (c) => {
+  const cfg = await getWebDAVConfig(c.env.DB)
+  if (!cfg.url) return c.json({ error: '尚未配置 WebDAV 服务器地址' }, 422)
+  const b = await c.req.json<{ filename?: string }>().catch(() => null)
+  const filename = b?.filename?.trim()
+  if (!filename) return c.json({ error: '请指定要恢复的备份文件' }, 422)
+  // 防止路径穿越：只允许纯文件名
+  if (filename.includes('/') || filename.includes('\\') || filename.includes('..')) {
+    return c.json({ error: '非法的文件名' }, 422)
+  }
+
+  const { baseUrl, auth, cleanDir } = webdavBase(cfg)
+  const fileUrl = new URL(cleanDir + filename, baseUrl).toString()
+  try {
+    const res = await fetch(fileUrl, { headers: { Authorization: auth } })
+    if (res.status === 401 || res.status === 403) {
+      return c.json({ error: 'WebDAV 认证失败，请检查账号与应用授权码' }, 422)
+    }
+    if (!res.ok) {
+      return c.json({ error: `下载备份失败：HTTP ${res.status} ${res.statusText}` }, 422)
+    }
+    const text = await res.text()
+    let payload: Partial<BackupData>
+    try {
+      payload = JSON.parse(text)
+    } catch {
+      return c.json({ error: '该文件不是有效的 JSON 备份文件' }, 422)
+    }
+    if (!payload || typeof payload !== 'object' || !payload.tables) {
+      return c.json({ error: '该文件不是本系统的备份文件（缺少 tables 字段）' }, 422)
+    }
+
+    const imported = await importBackupData(c.env.DB, payload)
+    return c.json({ ok: true, imported, filename })
+  } catch (err: any) {
+    return c.json({ error: `恢复失败：${err?.message || String(err)}` }, 422)
+  }
 })
 
 export default app

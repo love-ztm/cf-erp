@@ -820,6 +820,39 @@
                     <button class="btn-primary" type="submit">保存配置</button>
                   </div>
                 </form>
+
+                <!-- 远程备份文件列表 -->
+                <div style="margin-top:18px; border-top:1px solid var(--line); padding-top:14px">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
+                    <h4 style="margin:0; font-size:13px">📁 远程备份列表</h4>
+                    <button type="button" class="btn-sm" :disabled="webdavListLoading || !webdav.url" @click="loadWebDAVList">
+                      {{ webdavListLoading ? '正在获取...' : '刷新列表' }}
+                    </button>
+                  </div>
+
+                  <div v-if="webdavRemoteList.length" class="table-wrap" style="max-height:220px; overflow:auto">
+                    <table style="font-size:12px">
+                      <thead>
+                        <tr><th>备份文件</th><th>时间</th><th>大小</th><th></th></tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="f in webdavRemoteList" :key="f.name">
+                          <td style="max-width:170px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ f.name }}</td>
+                          <td>{{ f.modified }}</td>
+                          <td>{{ fmtSize(f.size) }}</td>
+                          <td>
+                            <button type="button" class="btn-sm btn-danger" :disabled="webdavRestoring" @click="restoreFromWebDAV(f)">
+                              {{ webdavRestoring ? '恢复中...' : '恢复' }}
+                            </button>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div v-else-if="webdav.url && !webdavListLoading" class="text-muted" style="font-size:12px; padding:6px 0">
+                    暂无远程备份文件，可点击上方「立即测试并上传备份」生成第一份。
+                  </div>
+                </div>
               </div>
 
               <!-- 公司与系统配置 -->

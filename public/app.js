@@ -132,6 +132,9 @@ const app = createApp({
         last_error: '',
       },
       webdavTesting: false,
+      webdavRemoteList: [],   // WebDAV 远程备份文件列表
+      webdavListLoading: false,
+      webdavRestoring: false,
 
       // 往来单位
       partyTab: 'supplier',
@@ -232,6 +235,12 @@ const app = createApp({
     dt(s) {
       if (!s) return ''
       return new Date(s).toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+    },
+    fmtSize(bytes) {
+      if (!bytes && bytes !== 0) return ''
+      if (bytes < 1024) return bytes + ' B'
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+      return (bytes / 1024 / 1024).toFixed(2) + ' MB'
     },
     fundLabel(t) { return FUND_TYPE_LABEL[t] || t },
     // 欠款展示：正数=欠款，负数=预收（客户多付/我方多付）
@@ -399,6 +408,10 @@ const app = createApp({
         if (uList) {
           this.userList = uList
         }
+        // 已配置 WebDAV 地址时，自动拉取远程备份列表
+        if (wRes.url) {
+          this.loadWebDAVList()
+        }
       } catch (e) {
         // 忽略静默失败
       }
@@ -456,6 +469,42 @@ const app = createApp({
         await this.loadSettings()
       } finally {
         this.webdavTesting = false
+      }
+    },
+    // 拉取 WebDAV 远程备份文件列表
+    async loadWebDAVList() {
+      if (!this.webdav.url) return
+      this.webdavListLoading = true
+      try {
+        const res = await api('/settings/webdav/list', { method: 'POST' })
+        this.webdavRemoteList = Array.isArray(res.files) ? res.files : []
+        if (res.error) this.toast(res.error, 'err')
+      } catch (e) {
+        this.webdavRemoteList = []
+        this.toast('无法获取远程备份列表：' + e.message, 'err')
+      } finally {
+        this.webdavListLoading = false
+      }
+    },
+    // 从 WebDAV 远程备份恢复
+    async restoreFromWebDAV(file) {
+      const name = typeof file === 'string' ? file : file?.name
+      if (!name) return
+      if (!confirm(`确定要从远程备份「${name}」恢复数据吗？\n\n警告：当前所有数据将被该备份文件完全覆盖！`)) return
+      if (!confirm('再次确认：还原操作不可逆，原有数据将全部丢失，是否立即执行？')) return
+      this.webdavRestoring = true
+      try {
+        const res = await api('/settings/webdav/restore', {
+          method: 'POST',
+          body: { filename: name },
+        })
+        this.toast(`已从远程备份恢复成功：${res.filename || name}`)
+        await this.loadView()
+        await this.loadWebDAVList()
+      } catch (e) {
+        this.toast('恢复失败：' + e.message, 'err')
+      } finally {
+        this.webdavRestoring = false
       }
     },
     async downloadBackup() {

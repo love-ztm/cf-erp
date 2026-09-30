@@ -58,14 +58,9 @@ app.get('/backup/export', requireAdmin, async (c) => {
 })
 
 // 上传并还原备份（全量覆盖，还原后自动按流水重放重算）
-app.post('/backup/import', requireAdmin, async (c) => {
-  const db = c.env.DB
-  const body = await c.req.json<Partial<BackupData>>().catch(() => null)
-  if (!body || typeof body !== 'object' || !body.tables) {
-    return c.json({ error: '无效的备份文件格式' }, 422)
-  }
-
-  const tdata = body.tables
+// 抽取为公用函数，供 /backup/import 与 WebDAV 远程恢复共用
+export async function importBackupData(db: D1Database, body: Partial<BackupData>): Promise<Record<string, number>> {
+  const tdata = body.tables ?? {}
   // 1. 清空所有现有业务数据
   const cleanStmts: D1PreparedStatement[] = [
     db.prepare('DELETE FROM sale_items'),
@@ -106,6 +101,17 @@ app.post('/backup/import', requireAdmin, async (c) => {
 
   // 3. 自动按流水重算库存、欠款与余额
   await recomputeAll(db)
+  return insertCounts
+}
+
+app.post('/backup/import', requireAdmin, async (c) => {
+  const db = c.env.DB
+  const body = await c.req.json<Partial<BackupData>>().catch(() => null)
+  if (!body || typeof body !== 'object' || !body.tables) {
+    return c.json({ error: '无效的备份文件格式' }, 422)
+  }
+
+  const insertCounts = await importBackupData(db, body)
   return c.json({ ok: true, imported: insertCounts })
 })
 
