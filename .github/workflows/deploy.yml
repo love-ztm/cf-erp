@@ -16,6 +16,8 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: npm install
+      - name: Inject build version (cache busting)
+        run: sed -i "s/BUILD_VERSION/${{ github.run_id }}/g" public/index.html
       - name: Deploy Worker (账号1)
         run: npx wrangler deploy --config wrangler.acc1.jsonc
         env:
@@ -31,6 +33,8 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: npm install
+      - name: Inject build version (cache busting)
+        run: sed -i "s/BUILD_VERSION/${{ github.run_id }}/g" public/index.html
       - name: Deploy Worker (账号2)
         run: npx wrangler deploy
         env:
