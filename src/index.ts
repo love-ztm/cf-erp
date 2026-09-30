@@ -67,7 +67,7 @@ app.route('/api', backup)
 app.route('/api', webdav)
 app.route('/api', users)
 
-// 读取公司基础信息配置（系统名、公司名、电话、地址等）
+// 读取公司基础信息配置（系统名、公司名、电话、地址等，公开接口无需登录）
 app.get('/api/settings/company', async (c) => {
   const db = c.env.DB
   const rows = await db

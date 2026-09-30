@@ -915,6 +915,7 @@ const app = createApp({
 
     // ===== 打印 =====
     doPrint() { window.print() },
+    closePrint() { this.printDoc = null },
     printOrderDetail() {
       const d = this.orderDetail
       if (!d) return
@@ -1130,6 +1131,13 @@ const app = createApp({
   mounted() {
     window.addEventListener('hashchange', this.onHash)
     this.onHash()
+    // 应用启动时先加载公司配置（公开接口，无需登录），避免刷新后回退到默认值
+    api('/settings/company')
+      .then((res) => {
+        this.company = { ...this.company, ...res }
+        document.title = this.company.app_title || 'Cloud ERP 进销存'
+      })
+      .catch(() => {})
     // 先显示页面，再检查登录状态
     this.booted = true
     api('/me')

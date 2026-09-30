@@ -1347,8 +1347,8 @@
         <div class="no-print" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
           <span class="text-muted">打印预览（A4 / 票据打印机自适应）</span>
           <div>
-            <button class="btn-primary" @click="doPrint">立即打印</button>
-            <button @click="printDoc = null" style="margin-left:8px">关闭</button>
+            <button type="button" class="btn-primary" @click="doPrint">立即打印</button>
+            <button type="button" @click="closePrint" style="margin-left:8px">关闭</button>
           </div>
         </div>
 
