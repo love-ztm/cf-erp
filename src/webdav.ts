@@ -184,15 +184,18 @@ function webdavBase(cfg: WebDAVConfig): { baseUrl: string; auth: string; cleanDi
 }
 
 // 解析 PROPFIND 返回的 multistatus XML（用正则提取文件 href / 大小 / 修改时间）
-// 注意：标签可能带命名空间前缀（如 <d:href>），正则需兼容可选前缀
+// 注意：1) 标签可带命名空间前缀（如 <d:href> / <D:response>）
+//      2) 开始标签可带属性（如 <D:response xmlns:lp1="DAV:">），需容忍属性后再取内容
 function parseMultistatus(xml: string): Array<{ name: string; size: number; modified: string }> {
   const items: Array<{ name: string; size: number; modified: string }> = []
-  const tag = (name: string) => `<(?:[A-Za-z0-9_-]+:)?${name}>`
-  const respRe = new RegExp(tag('response') + '([\\s\\S]*?)</(?:[A-Za-z0-9_-]+:)?response>', 'g')
+  // openTag: 前缀可选 + 名称后允许空白/属性，直到 >
+  const openTag = (name: string) => `<(?:[A-Za-z0-9_-]+:)?${name}\\b[^>]*>`
+  const closeTag = (name: string) => `</(?:[A-Za-z0-9_-]+:)?${name}>`
+  const respRe = new RegExp(openTag('response') + '([\\s\\S]*?)' + closeTag('response'), 'g')
   let m: RegExpExecArray | null
   while ((m = respRe.exec(xml)) !== null) {
     const block = m[1]
-    const hrefRe = new RegExp(tag('href') + '([\\s\\S]*?)</(?:[A-Za-z0-9_-]+:)?href>')
+    const hrefRe = new RegExp(openTag('href') + '([\\s\\S]*?)' + closeTag('href'))
     const hrefMatch = block.match(hrefRe)
     if (!hrefMatch) continue
     let href = hrefMatch[1].trim()
@@ -202,8 +205,8 @@ function parseMultistatus(xml: string): Array<{ name: string; size: number; modi
     let name = rawName
     try { name = decodeURIComponent(rawName) } catch { /* 保持原样 */ }
     if (!name || !name.toLowerCase().endsWith('.json')) continue
-    const sizeRe = new RegExp(tag('getcontentlength') + '([\\s\\S]*?)</(?:[A-Za-z0-9_-]+:)?getcontentlength>')
-    const modRe = new RegExp(tag('getlastmodified') + '([\\s\\S]*?)</(?:[A-Za-z0-9_-]+:)?getlastmodified>')
+    const sizeRe = new RegExp(openTag('getcontentlength') + '([\\s\\S]*?)' + closeTag('getcontentlength'))
+    const modRe = new RegExp(openTag('getlastmodified') + '([\\s\\S]*?)' + closeTag('getlastmodified'))
     const sizeMatch = block.match(sizeRe)
     const modMatch = block.match(modRe)
     items.push({
@@ -255,7 +258,7 @@ app.post('/settings/webdav/list', requireAdmin, async (c) => {
       files,
       // 调试诊断：原始响应前 3000 字符 + response 节点计数（便于排查服务器返回格式差异）
       xml_sample: xml.slice(0, 3000),
-      resp_count: (xml.match(/<(?:[A-Za-z0-9_-]+:)?response>/g) || []).length,
+      resp_count: (xml.match(/<(?:[A-Za-z0-9_-]+:)?response\b[^>]*>/g) || []).length,
     })
   } catch (err: any) {
     return c.json({ error: `WebDAV 连接失败：${err?.message || String(err)}`, files: [] }, 200)
