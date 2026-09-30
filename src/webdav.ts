@@ -197,8 +197,10 @@ function parseMultistatus(xml: string): Array<{ name: string; size: number; modi
     if (!hrefMatch) continue
     let href = hrefMatch[1].trim()
     if (href.startsWith('<![CDATA[')) href = href.replace(/^<!\[CDATA\[|\]\]>$/g, '')
-    // 取最后一段作为文件名，并反转义 %XX
-    const name = decodeURIComponent(href.split('/').filter(Boolean).pop() || '')
+    // 取最后一段作为文件名，并反转义 %XX（部分服务器 href 是全 URL 或带 URL 编码）
+    const rawName = href.split('/').filter(Boolean).pop() || ''
+    let name = rawName
+    try { name = decodeURIComponent(rawName) } catch { /* 保持原样 */ }
     if (!name || !name.toLowerCase().endsWith('.json')) continue
     const sizeRe = new RegExp(tag('getcontentlength') + '([\\s\\S]*?)</(?:[A-Za-z0-9_-]+:)?getcontentlength>')
     const modRe = new RegExp(tag('getlastmodified') + '([\\s\\S]*?)</(?:[A-Za-z0-9_-]+:)?getlastmodified>')
@@ -248,7 +250,13 @@ app.post('/settings/webdav/list', requireAdmin, async (c) => {
     const xml = await res.text()
     const files = parseMultistatus(xml)
       .sort((a, b) => (a.modified < b.modified ? 1 : -1))
-    return c.json({ ok: true, files })
+    return c.json({
+      ok: true,
+      files,
+      // 调试诊断：原始响应前 3000 字符 + response 节点计数（便于排查服务器返回格式差异）
+      xml_sample: xml.slice(0, 3000),
+      resp_count: (xml.match(/<(?:[A-Za-z0-9_-]+:)?response>/g) || []).length,
+    })
   } catch (err: any) {
     return c.json({ error: `WebDAV 连接失败：${err?.message || String(err)}`, files: [] }, 200)
   }

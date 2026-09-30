@@ -479,6 +479,10 @@ const app = createApp({
         const res = await api('/settings/webdav/list', { method: 'POST' })
         this.webdavRemoteList = Array.isArray(res.files) ? res.files : []
         if (res.error) this.toast(res.error, 'err')
+        // 调试：列表为空时打印原始响应，便于排查服务器格式差异
+        if (res.xml_sample && !this.webdavRemoteList.length) {
+          console.log('[webdav] list empty. resp_count=' + res.resp_count + ' xml_sample=', res.xml_sample)
+        }
       } catch (e) {
         this.webdavRemoteList = []
         this.toast('无法获取远程备份列表：' + e.message, 'err')
