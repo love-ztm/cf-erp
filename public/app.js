@@ -61,6 +61,7 @@ const app = createApp({
       nav: NAV,
       view: 'dashboard',
       loggedIn: false,
+      authReady: false,   // 会话检查完成前显示加载页，避免刷新时闪登录框
       booted: false,
       loginUser: '',
       loginPwd: '',
@@ -1196,15 +1197,21 @@ const app = createApp({
         document.title = this.company.app_title || 'Cloud ERP 进销存'
       })
       .catch(() => {})
-    // 先显示页面，再检查登录状态
+    // 先显示加载页，再异步检查登录状态，避免已登录用户刷新时闪登录框
     this.booted = true
-    api('/me')
+    const check = api('/me')
+    const guard = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 8000))
+    Promise.race([check, guard])
       .then((res) => {
         this.loggedIn = true
         this.currentUser = res.user || { id: 1, username: 'admin', name: '管理员', role: 'admin', permissions: [] }
+        this.authReady = true
         this.loadView()
       })
-      .catch(() => { this.loggedIn = false })
+      .catch(() => {
+        this.loggedIn = false
+        this.authReady = true
+      })
   },
   template: '#app-template',
 })

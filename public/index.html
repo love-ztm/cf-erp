@@ -10,8 +10,16 @@
   <div id="app"></div>
 
   <script type="text/x-template" id="app-template">
+    <!-- 启动加载页：会话检查期间显示，避免刷新时闪登录框 -->
+    <div v-if="!authReady" class="boot-screen">
+      <div>
+        <div style="font-size:18px;font-weight:700;color:var(--primary);margin-bottom:10px">{{ company.app_title || 'Cloud ERP 进销存' }}</div>
+        <div style="font-size:13px;color:var(--muted)">正在加载数据…</div>
+      </div>
+    </div>
+
     <!-- 登录页 -->
-    <div v-if="booted && !loggedIn" class="login-wrap">
+    <div v-else-if="!loggedIn" class="login-wrap">
       <div class="login-box">
         <h1>{{ company.app_title || 'Cloud ERP 进销存' }}</h1>
         <p>{{ company.company_name || '企业进销存管理系统' }} · 进销存 · 资金 · 报表</p>
@@ -31,7 +39,7 @@
     </div>
 
     <!-- 主界面 -->
-    <div v-else-if="booted" class="layout">
+    <div v-else class="layout">
       <aside class="sidebar">
         <div class="logo">
           <span>{{ company.app_title || 'Cloud ERP' }}</span>
