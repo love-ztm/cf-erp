@@ -2,6 +2,14 @@
 
 跑在 **Cloudflare Workers + D1** 上的现代化无服务器（Serverless）进销存 ERP 系统，个人 / 小微企业 / 店铺免费使用（Cloudflare 免费额度完全覆盖）。
 
+## 🔗 在线演示
+
+- **演示地址**：[https://ycerp.us.ci](https://ycerp.us.ci)
+- **演示账号**：`admin`
+- **演示密码**：`admin123`
+
+> ⚠️ 演示环境数据可能被其他体验者修改，请勿在演示环境存放真实业务数据。
+
 - **后端**：Hono + D1（SQLite），单 Worker 同时承载 API、静态页面托管与 Cron 定时任务
 - **前端**：Vue 3 原生单页应用（免构建步骤），响应式暗黑科技感 UI，适配桌面与手机端
 - **安全**：多用户角色权限体系（管理员 / 员工 / 销售），SHA-256 哈希安全存储，HMAC 签名 Session Cookie
