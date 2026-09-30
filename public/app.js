@@ -103,6 +103,9 @@ const app = createApp({
       returnModal: null, // { type:'sales'|'purchases', source, items, refund_way, account_id }
       submitting: false,
 
+      // 打印预览文档数据（声明在 data 里成为 Vue 响应式属性）
+      printDoc: null,
+
       // 公司与系统配置（默认通用占位符，由用户在系统设置里自定义或导入备份）
       company: {
         app_title: 'Cloud ERP 进销存',
