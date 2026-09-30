@@ -915,7 +915,11 @@ const app = createApp({
 
     // ===== 打印 =====
     doPrint() { window.print() },
-    closePrint() { this.printDoc = null },
+    closePrint() {
+      window.__dbg = { closePrintRan: true, before: typeof this.printDoc }
+      this.printDoc = null
+      window.__dbg.after = typeof this.printDoc
+    },
     printOrderDetail() {
       const d = this.orderDetail
       if (!d) return
