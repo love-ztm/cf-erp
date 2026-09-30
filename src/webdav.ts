@@ -184,21 +184,26 @@ function webdavBase(cfg: WebDAVConfig): { baseUrl: string; auth: string; cleanDi
 }
 
 // 解析 PROPFIND 返回的 multistatus XML（用正则提取文件 href / 大小 / 修改时间）
+// 注意：标签可能带命名空间前缀（如 <d:href>），正则需兼容可选前缀
 function parseMultistatus(xml: string): Array<{ name: string; size: number; modified: string }> {
   const items: Array<{ name: string; size: number; modified: string }> = []
-  const respRe = /<response>([\s\S]*?)<\/response>/g
+  const tag = (name: string) => `<(?:[A-Za-z0-9_-]+:)?${name}>`
+  const respRe = new RegExp(tag('response') + '([\\s\\S]*?)</(?:[A-Za-z0-9_-]+:)?response>', 'g')
   let m: RegExpExecArray | null
   while ((m = respRe.exec(xml)) !== null) {
     const block = m[1]
-    const hrefMatch = block.match(/<href>([\s\S]*?)<\/href>/)
+    const hrefRe = new RegExp(tag('href') + '([\\s\\S]*?)</(?:[A-Za-z0-9_-]+:)?href>')
+    const hrefMatch = block.match(hrefRe)
     if (!hrefMatch) continue
     let href = hrefMatch[1].trim()
     if (href.startsWith('<![CDATA[')) href = href.replace(/^<!\[CDATA\[|\]\]>$/g, '')
     // 取最后一段作为文件名，并反转义 %XX
     const name = decodeURIComponent(href.split('/').filter(Boolean).pop() || '')
     if (!name || !name.toLowerCase().endsWith('.json')) continue
-    const sizeMatch = block.match(/<getcontentlength>([\s\S]*?)<\/getcontentlength>/)
-    const modMatch = block.match(/<getlastmodified>([\s\S]*?)<\/getlastmodified>/)
+    const sizeRe = new RegExp(tag('getcontentlength') + '([\\s\\S]*?)</(?:[A-Za-z0-9_-]+:)?getcontentlength>')
+    const modRe = new RegExp(tag('getlastmodified') + '([\\s\\S]*?)</(?:[A-Za-z0-9_-]+:)?getlastmodified>')
+    const sizeMatch = block.match(sizeRe)
+    const modMatch = block.match(modRe)
     items.push({
       name,
       size: sizeMatch ? parseInt(sizeMatch[1].trim(), 10) || 0 : 0,
