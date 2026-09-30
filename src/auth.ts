@@ -125,8 +125,14 @@ export function readSession(c: Context): string {
 // 登录中间件：解析并注入 `c.set('user', user)`
 export async function requireAuth(c: Context<{ Bindings: Env; Variables: { user: AuthUser } }>, next: Next) {
   const path = c.req.path
-  // 公开接口放行：登录、健康检查、公司配置（登录页也要显示公司名称）
-  if (path === '/api/login' || path === '/api/health' || path === '/api/settings/company') return next()
+  // 公开接口放行：登录、健康检查、公司配置读取（仅 GET；POST 保存仍需管理员认证）
+  if (
+    path === '/api/login' ||
+    path === '/api/health' ||
+    (path === '/api/settings/company' && c.req.method === 'GET')
+  ) {
+    return next()
+  }
 
   const user = await verifyUserSession(c.env.DB, readSession(c))
   if (!user) {
