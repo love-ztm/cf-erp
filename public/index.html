@@ -821,6 +821,16 @@
                     <label>远程存储目录</label>
                     <input v-model="webdav.remote_dir" placeholder="默认 /erp-backups" />
                   </div>
+                  <div class="form-grid" style="margin-top:12px">
+                    <div>
+                      <label>只保留最近天数</label>
+                      <input type="number" min="1" max="365" v-model.number="webdav.keep_days" placeholder="默认 10 天" />
+                    </div>
+                    <div>
+                      <label style="color:var(--muted)">说明</label>
+                      <div class="text-muted" style="font-size:12px; padding-top:6px">每次备份后自动删除超过该天数的远程旧备份。</div>
+                    </div>
+                  </div>
                   <div style="margin-top:16px; display:flex; justify-content:space-between; align-items:center">
                     <button type="button" class="btn-sm" :disabled="webdavTesting || !webdav.url" @click="testAndBackupWebDAV">
                       {{ webdavTesting ? '正在上传中...' : '立即测试并上传备份' }}

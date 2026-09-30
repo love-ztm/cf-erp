@@ -128,6 +128,7 @@ const app = createApp({
         username: '',
         password: '',
         remote_dir: '/erp-backups',
+        keep_days: 10,
         last_backup_at: '',
         last_status: '',
         last_error: '',
@@ -398,6 +399,7 @@ const app = createApp({
           username: wRes.username || '',
           password: wRes.password || '',
           remote_dir: wRes.remote_dir || '/erp-backups',
+          keep_days: wRes.keep_days || 10,
           last_backup_at: wRes.last_backup_at || '',
           last_status: wRes.last_status || '',
           last_error: wRes.last_error || '',
@@ -439,6 +441,7 @@ const app = createApp({
             username: this.webdav.username,
             password: this.webdav.password,
             remote_dir: this.webdav.remote_dir,
+            keep_days: this.webdav.keep_days,
           },
         })
         this.toast('WebDAV 配置已保存')
@@ -460,6 +463,7 @@ const app = createApp({
             username: this.webdav.username,
             password: this.webdav.password,
             remote_dir: this.webdav.remote_dir,
+            keep_days: this.webdav.keep_days,
           },
         })
         const res = await api('/settings/webdav/test', { method: 'POST' })

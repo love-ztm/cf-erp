@@ -10,6 +10,7 @@ export type WebDAVConfig = {
   username: string
   password: string
   remote_dir: string // e.g. /erp-backups/
+  keep_days?: number // 只保留最近 N 天的备份（默认 10）
   cron_schedule?: string // e.g. "0 2 * * *" (每天凌晨 2 点)
   last_backup_at?: string
   last_status?: string // 'success' | 'failed'
@@ -29,6 +30,7 @@ export async function getWebDAVConfig(db: D1Database): Promise<WebDAVConfig> {
     username: map.get('webdav_username') || '',
     password: map.get('webdav_password') || '',
     remote_dir: map.get('webdav_remote_dir') || '/erp-backups',
+    keep_days: parseInt(map.get('webdav_keep_days') || '10', 10) || 10,
     cron_schedule: map.get('webdav_cron_schedule') || '0 2 * * *',
     last_backup_at: map.get('webdav_last_backup_at') || '',
     last_status: map.get('webdav_last_status') || '',
@@ -55,6 +57,50 @@ async function ensureRemoteDir(base: string, dir: string, authHeader: string) {
       // 忽略目录已存在的错误
     }
   }
+}
+
+// 备份后清理：删除远程目录中超过 keepDays 天的旧备份文件（只处理本系统命名的 ERP备份_*.json）
+export async function pruneOldBackups(
+  baseUrl: string,
+  auth: string,
+  cleanDir: string,
+  keepDays: number
+): Promise<{ deleted: string[] }> {
+  const deleted: string[] = []
+  const dirUrl = new URL(cleanDir, baseUrl).toString()
+  try {
+    const res = await fetch(dirUrl, {
+      method: 'PROPFIND',
+      headers: { Authorization: auth, Depth: '1', 'Content-Type': 'application/xml' },
+      body: `<?xml version="1.0" encoding="utf-8"?>
+<d:propfind xmlns:d="DAV:">
+  <d:prop><d:getlastmodified/><d:getcontentlength/><d:displayname/></d:prop>
+</d:propfind>`,
+    })
+    if (!res.ok) return { deleted }
+    const xml = await res.text()
+    const files = parseMultistatus(xml).filter((f) => /^ERP备份_\d{8}_\d{6}\.json$/.test(f.name))
+    const cutoff = Date.now() - keepDays * 86400_000
+    for (const f of files) {
+      // 优先用服务器返回的修改时间；解析失败则回退到文件名里的日期
+      let fileTime = f.modified ? new Date(f.modified).getTime() : NaN
+      if (Number.isNaN(fileTime)) {
+        const m = f.name.match(/^ERP备份_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})\.json$/)
+        if (m) fileTime = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6])
+      }
+      if (!Number.isFinite(fileTime) || fileTime >= cutoff) continue
+      const fileUrl = new URL(cleanDir + f.name, baseUrl).toString()
+      try {
+        const dr = await fetch(fileUrl, { method: 'DELETE', headers: { Authorization: auth } })
+        if (dr.ok || dr.status === 204 || dr.status === 404) deleted.push(f.name)
+      } catch {
+        // 单个文件删除失败不影响其他
+      }
+    }
+  } catch {
+    // 清理失败不影响本次备份结果
+  }
+  return { deleted }
 }
 
 // 执行一次全量备份并上传至 WebDAV
@@ -103,7 +149,13 @@ export async function executeWebDAVBackup(db: D1Database): Promise<{ ok: boolean
       throw new Error(msg)
     }
 
-    // 5. 记录成功状态
+    // 5. 清理超出保留天数的旧备份
+    const pruned = await pruneOldBackups(baseUrl, auth, cleanDir, cfg.keep_days || 10)
+    if (pruned.deleted.length) {
+      console.log('[WebDAV] 已清理过期备份:', pruned.deleted.join(', '))
+    }
+
+    // 6. 记录成功状态
     await db.batch([
       db.prepare("INSERT INTO sys_config (key, value) VALUES ('webdav_last_backup_at', ?1) ON CONFLICT(key) DO UPDATE SET value = ?1").bind(now.toISOString()),
       db.prepare("INSERT INTO sys_config (key, value) VALUES ('webdav_last_status', 'success') ON CONFLICT(key) DO UPDATE SET value = 'success'"),
@@ -143,6 +195,7 @@ app.post('/settings/webdav', requireAdmin, async (c) => {
     username?: string
     password?: string
     remote_dir?: string
+    keep_days?: number
     cron_schedule?: string
   }>()
 
@@ -153,6 +206,7 @@ app.post('/settings/webdav', requireAdmin, async (c) => {
   // 如果传来的是占位符 ****** 或空，则保留原密码
   const password = b.password && b.password !== '******' ? b.password : cur.password
   const remote_dir = (b.remote_dir ?? cur.remote_dir).trim() || '/erp-backups'
+  const keepDays = Math.min(Math.max(parseInt(String(b.keep_days ?? cur.keep_days ?? 10), 10) || 10, 1), 365)
 
   await db.batch([
     db.prepare("INSERT INTO sys_config (key, value) VALUES ('webdav_enabled', ?1) ON CONFLICT(key) DO UPDATE SET value = ?1").bind(enabled),
@@ -160,6 +214,7 @@ app.post('/settings/webdav', requireAdmin, async (c) => {
     db.prepare("INSERT INTO sys_config (key, value) VALUES ('webdav_username', ?1) ON CONFLICT(key) DO UPDATE SET value = ?1").bind(username),
     db.prepare("INSERT INTO sys_config (key, value) VALUES ('webdav_password', ?1) ON CONFLICT(key) DO UPDATE SET value = ?1").bind(password),
     db.prepare("INSERT INTO sys_config (key, value) VALUES ('webdav_remote_dir', ?1) ON CONFLICT(key) DO UPDATE SET value = ?1").bind(remote_dir),
+    db.prepare("INSERT INTO sys_config (key, value) VALUES ('webdav_keep_days', ?1) ON CONFLICT(key) DO UPDATE SET value = ?1").bind(String(keepDays)),
   ])
 
   return c.json({ ok: true })
