@@ -43,7 +43,7 @@ const NAV = [
   { key: 'products', label: '商品管理', icon: '⊞' },
   { key: 'purchase', label: '采购入库', icon: '↓' },
   { key: 'sales', label: '销售出库', icon: '↑' },
-  { key: 'repairs', label: '维修管理', icon: '🔧' },
+  { key: 'repairs', label: '维修管理', icon: '⚒\uFE0E' },
   { key: 'stock', label: '库存查询', icon: '▤' },
   { key: 'funds', label: '资金账户', icon: '¥' },
   { key: 'reports', label: '报表中心', icon: '▦' },
