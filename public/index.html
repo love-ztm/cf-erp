@@ -290,7 +290,18 @@
           </div>
 
           <div class="card">
-            <h3>采购记录</h3>
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px">
+              <h3 style="margin:0">采购记录</h3>
+              <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+                <input type="date" v-model="ordFrom" style="width:145px" @change="ordFilterChanged" />
+                <span class="text-muted">至</span>
+                <input type="date" v-model="ordTo" style="width:145px" @change="ordFilterChanged" />
+                <button type="button" class="btn-sm" @click="setOrdRange('month')">本月</button>
+                <button type="button" class="btn-sm" @click="setOrdRange('prev')">上月</button>
+                <button type="button" class="btn-sm" @click="setOrdRange('all')">全部</button>
+                <span class="text-muted" style="font-size:12px">共 {{ purchases.length }} 单</span>
+              </div>
+            </div>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>时间</th><th>供应商</th><th class="num">金额</th><th class="num">已付</th><th class="num">欠款</th><th class="num">明细数</th><th>备注</th><th>操作</th></tr></thead>
@@ -379,7 +390,18 @@
           </div>
 
           <div class="card">
-            <h3>销售记录</h3>
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px">
+              <h3 style="margin:0">销售记录</h3>
+              <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+                <input type="date" v-model="ordFrom" style="width:145px" @change="ordFilterChanged" />
+                <span class="text-muted">至</span>
+                <input type="date" v-model="ordTo" style="width:145px" @change="ordFilterChanged" />
+                <button type="button" class="btn-sm" @click="setOrdRange('month')">本月</button>
+                <button type="button" class="btn-sm" @click="setOrdRange('prev')">上月</button>
+                <button type="button" class="btn-sm" @click="setOrdRange('all')">全部</button>
+                <span class="text-muted" style="font-size:12px">共 {{ sales.length }} 单</span>
+              </div>
+            </div>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>时间</th><th>客户</th><th class="num">金额</th><th class="num">已收</th><th class="num">欠款</th><th class="num">明细数</th><th>备注</th><th>操作</th></tr></thead>

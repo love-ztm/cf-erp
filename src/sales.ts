@@ -103,12 +103,20 @@ app.get('/sales', async (c) => {
   const limit = Math.min(500, Number(c.req.query('limit')) || 100)
   const offset = Math.max(0, Number(c.req.query('offset')) || 0)
   const kind = c.req.query('kind') === 'return' ? 'return' : c.req.query('kind') === 'normal' ? 'normal' : ''
-  const where = kind ? 'WHERE s.kind = ?3' : ''
-  const binds = kind ? [limit, offset, kind] : [limit, offset]
+  const from = (c.req.query('from') || '').trim()
+  const to = (c.req.query('to') || '').trim()
+  const conds: string[] = []
+  const binds: unknown[] = []
+  if (kind) { conds.push(`s.kind = ?${binds.length + 1}`); binds.push(kind) }
+  // created_at 为定宽 ISO 文本，字符串比较即时间比较
+  if (from) { conds.push(`s.created_at >= ?${binds.length + 1}`); binds.push(from) }
+  if (to) { conds.push(`s.created_at < ?${binds.length + 1}`); binds.push(to) }
+  binds.push(limit, offset)
+  const where = conds.length ? 'WHERE ' + conds.join(' AND ') : ''
   const res = await c.env.DB
     .prepare(
       `SELECT s.*, (SELECT COUNT(*) FROM sale_items si WHERE si.sale_id = s.id) AS item_count
-       FROM sales s ${where} ORDER BY s.id DESC LIMIT ?1 OFFSET ?2`
+       FROM sales s ${where} ORDER BY s.id DESC LIMIT ?${binds.length - 1} OFFSET ?${binds.length}`
     )
     .bind(...binds)
     .all()

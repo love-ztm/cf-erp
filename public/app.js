@@ -87,6 +87,9 @@ const app = createApp({
       dash: null,
       dashFrom: monthStartStr(),
       dashTo: todayStr(),
+      // 采购/销售记录筛选（默认当月；留空显示全部）
+      ordFrom: monthStartStr(),
+      ordTo: todayStr(),
 
       // 商品
       prodSearch: '',
@@ -623,14 +626,39 @@ const app = createApp({
     },
     async loadOrders(kind) {
       const reqs = [api('/products'), api('/parties'), api('/accounts')]
-      if (kind === 'purchase') reqs.push(api('/purchases'))
-      else reqs.push(api('/sales'))
+      let qs = ''
+      if (this.ordFrom && this.ordTo) {
+        const r = rangeISO(this.ordFrom, this.ordTo)
+        qs = `?from=${encodeURIComponent(r.from)}&to=${encodeURIComponent(r.to)}`
+      }
+      if (kind === 'purchase') reqs.push(api('/purchases' + qs))
+      else reqs.push(api('/sales' + qs))
       const [products, parties, accounts, orders] = await Promise.all(reqs)
       this.products = products
       this.parties = parties
       this.accounts = accounts
       if (kind === 'purchase') this.purchases = orders
       else this.sales = orders
+    },
+    // 采购/销售记录快捷区间：month 当月 / prev 上月 / all 全部
+    setOrdRange(mode) {
+      if (mode === 'all') {
+        this.ordFrom = ''
+        this.ordTo = ''
+      } else if (mode === 'prev') {
+        const d = new Date()
+        d.setDate(1)
+        d.setMonth(d.getMonth() - 1)
+        this.ordFrom = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-01'
+        this.ordTo = dstr(new Date(d.getFullYear(), d.getMonth() + 1, 0))
+      } else {
+        this.ordFrom = monthStartStr()
+        this.ordTo = todayStr()
+      }
+      this.ordFilterChanged()
+    },
+    ordFilterChanged() {
+      this.loadOrders(this.view === 'sales' ? 'sales' : 'purchase')
     },
     async loadFunds() {
       const [accounts, funds, parties] = await Promise.all([api('/accounts'), api('/funds'), api('/parties')])
