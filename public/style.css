@@ -664,6 +664,7 @@ button:disabled {
   font-weight: 800;
   letter-spacing: 0.5px;
   margin-bottom: 4px;
+  text-align: center;
   color: #fff;
   background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%);
   -webkit-background-clip: text;
@@ -673,6 +674,7 @@ button:disabled {
   color: #64748b;
   font-size: 12.5px;
   margin-bottom: 24px;
+  text-align: center;
 }
 .login-box label { color: #94a3b8; }
 .login-box input {
