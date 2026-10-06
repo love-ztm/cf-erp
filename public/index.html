@@ -46,10 +46,8 @@
       <aside class="sidebar">
         <div class="logo">
           <img src="/logo.svg?v=BUILD_VERSION" alt="logo" class="logo-img" />
-          <div>
-            <span>{{ company.app_title || 'Cloud ERP' }}</span>
-            <small>{{ company.company_name || '进销存管理系统' }}</small>
-          </div>
+          <span>{{ company.app_title || 'Cloud ERP' }}</span>
+          <small>{{ company.company_name || '进销存管理系统' }}</small>
         </div>
         <nav class="nav">
           <a v-for="n in nav" :key="n.key" v-show="navVisible(n)" :class="{ active: view === n.key }" @click="go(n.key)">
