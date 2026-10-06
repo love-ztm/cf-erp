@@ -1368,7 +1368,8 @@ const app = createApp({
       if ((m.type === 'receipt' || m.type === 'payment') && !m.party_id) return this.toast('请选择往来单位', 'err')
       try {
         const body = { ...m, amount: Number(m.amount) }
-        if (!m.date) delete body.date
+        if (m.date) body.doc_date = m.date
+        delete body.date
         await api('/funds', { method: 'POST', body })
         this.fundModal = null
         await this.loadFunds()
