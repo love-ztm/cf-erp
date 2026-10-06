@@ -55,7 +55,7 @@ const REPAIR_STATUS_LABEL = { repairing: '维修中', done: '已完成', closed:
 
 const FUND_TYPE_LABEL = {
   receipt: '收款', payment: '付款', income: '其他收入', expense: '其他支出',
-  sale_paid: '销货收款', purchase_paid: '购货付款',
+  sale_paid: '销货收款', purchase_paid: '购货付款', repair_paid: '维修收款',
   sale_return: '销货退款', purchase_return: '退货收回',
 }
 
@@ -939,7 +939,7 @@ const app = createApp({
       return (SIGN[m.type + ':' + (m.kind || '')] || 1) * Number(m.qty || 0)
     },
     fundSigned(m) {
-      const plus = ['receipt', 'income', 'sale_paid', 'purchase_return'].includes(m.type)
+      const plus = ['receipt', 'income', 'sale_paid', 'repair_paid', 'purchase_return'].includes(m.type)
       return (plus ? 1 : -1) * Number(m.amount || 0)
     },
 

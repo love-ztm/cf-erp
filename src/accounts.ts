@@ -74,6 +74,9 @@ app.get('/funds', async (c) => {
          UNION ALL
          SELECT pu.id, 'purchase_paid', pu.supplier_id, pu.supplier_name, pu.account_id, pu.paid, pu.note, pu.created_at, pu.kind, pu.id
            FROM purchases pu WHERE pu.kind = 'normal' AND pu.paid > 0 AND (?1 = '' OR 'purchase_paid' = ?1)
+         UNION ALL
+         SELECT r.id, 'repair_paid', r.customer_id, r.customer_name, r.account_id, r.paid, r.note, r.created_at, 'normal', r.id
+           FROM repairs r WHERE r.paid > 0 AND (?1 = '' OR 'repair_paid' = ?1)
        ) ORDER BY created_at DESC LIMIT ?2`
     )
     .bind(type, limit)
