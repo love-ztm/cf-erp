@@ -98,9 +98,15 @@
                 <div class="stat-sub">包含退货冲抵后金额</div>
               </div>
               <div class="stat-card purple">
-                <div class="stat-header"><span class="stat-label">资产池 · 账户总余额</span><span class="stat-tag">实时</span></div>
-                <div class="stat-value purple">{{ money(dash.money.accountTotal) }}</div>
-                <div class="stat-sub">{{ dash.counts.accounts }} 个结算账户流动资金</div>
+                <div class="stat-header">
+                  <span class="stat-label">资产池 · 账户总余额</span>
+                  <span style="display:flex; align-items:center; gap:6px">
+                    <span class="stat-tag">实时</span>
+                    <button type="button" @click="toggleBalance" :title="hideBalance ? '点击显示金额' : '点击隐藏金额'" style="background:none; border:none; cursor:pointer; padding:0 2px; font-size:14px; line-height:1; color:inherit; opacity:.65">{{ hideBalance ? '👁' : '🙈' }}</button>
+                  </span>
+                </div>
+                <div class="stat-value purple">{{ hideBalance ? '¥ ＊＊＊＊＊' : money(dash.money.accountTotal) }}</div>
+                <div class="stat-sub">{{ dash.counts.accounts }} 个结算账户流动资金{{ hideBalance ? '（金额已隐藏）' : '' }}</div>
               </div>
             </div>
 

@@ -64,6 +64,7 @@ const app = createApp({
       nav: NAV,
       view: 'dashboard',
       loggedIn: false,
+      hideBalance: localStorage.getItem('erp_hide_balance') !== '0',  // 概览账户总余额默认隐藏，记忆用户选择
       authReady: false,   // 会话检查完成前显示加载页，避免刷新时闪登录框
       booted: false,
       loginUser: '',
@@ -235,6 +236,10 @@ const app = createApp({
     navVisible(item) {
       if (item.key === 'settings' && this.currentUser?.role !== 'admin') return false
       return this.hasPerm(item.key)
+    },
+    toggleBalance() {
+      this.hideBalance = !this.hideBalance
+      localStorage.setItem('erp_hide_balance', this.hideBalance ? '1' : '0')
     },
     blankOrder() {
       return { supplier_id: '', customer_id: '', name_free: '', note: '', discount: '', paid: '', account_id: '', date: '', items: [{ product_id: '', qty: '', price: '' }] }
