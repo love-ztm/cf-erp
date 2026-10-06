@@ -126,10 +126,11 @@ CREATE TABLE IF NOT EXISTS sales (
 CREATE TABLE IF NOT EXISTS sale_items (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   sale_id    INTEGER NOT NULL,
-  product_id INTEGER NOT NULL,
+  product_id INTEGER NOT NULL,   -- 0 = 手填项（不入库商品/服务），名称存 name
+  name       TEXT DEFAULT '',    -- 手填项名称
   qty        REAL NOT NULL,
   unit_price REAL NOT NULL,
-  unit_cost  REAL NOT NULL   -- 出库时的加权平均成本快照
+  unit_cost  REAL NOT NULL   -- 出库时的加权平均成本快照（手填项为手填成本）
 );
 CREATE INDEX IF NOT EXISTS idx_sitems_sale    ON sale_items(sale_id);
 CREATE INDEX IF NOT EXISTS idx_sitems_product ON sale_items(product_id);

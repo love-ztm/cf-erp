@@ -3,7 +3,7 @@ import { recomputeAll, round2, docDateToISO } from './db'
 
 const app = new Hono<{ Bindings: Env }>()
 
-type ItemInput = { product_id?: number; qty?: number; unit_price?: number }
+type ItemInput = { product_id?: number; name?: string; qty?: number; unit_price?: number; unit_cost?: number }
 
 // 修改销售单：更新表头与明细，库存/欠款/余额按全部流水重算
 app.put('/sales/:id', async (c) => {
@@ -23,30 +23,47 @@ app.put('/sales/:id', async (c) => {
     doc_date?: string
     items?: ItemInput[]
   }>()
-  const items = (b.items ?? []).filter((it) => Number(it.qty) > 0)
-  if (!items.length) return c.json({ error: '至少需要一条明细' }, 422)
+  const allItems = (b.items ?? []).filter((it) => Number(it.qty) > 0)
+  if (!allItems.length) return c.json({ error: '至少需要一条明细' }, 422)
+  const manualItems = allItems.filter((it) => !Number(it.product_id))
+  const stockItems = allItems.filter((it) => Number(it.product_id))
+  for (const it of manualItems) {
+    if (!(it.name ?? '').trim()) return c.json({ error: '手填项需要填写名称' }, 422)
+    const price = Number(it.unit_price)
+    if (!Number.isFinite(price) || price < 0) return c.json({ error: '销售单价不能为负数' }, 422)
+    const cost = Number(it.unit_cost)
+    if (Number.isFinite(cost) && cost < 0) return c.json({ error: '手填项成本不能为负数' }, 422)
+  }
+  const items = allItems
 
-  const ids = [...new Set(items.map((it) => Number(it.product_id)))]
+  const ids = [...new Set(stockItems.map((it) => Number(it.product_id)))]
   if (ids.some((x) => !Number.isInteger(x) || x <= 0)) return c.json({ error: '明细中商品不合法' }, 422)
-  const placeholders = ids.map((_, i) => `?${i + 1}`).join(',')
-  const found = await db
-    .prepare(`SELECT id, name, stock, no_stock FROM products WHERE id IN (${placeholders})`)
-    .bind(...ids)
-    .all<{ id: number; name: string; stock: number; no_stock: number }>()
-  const map = new Map((found.results ?? []).map((p) => [p.id, p]))
+  let map = new Map<number, { id: number; name: string; stock: number; no_stock: number }>()
+  if (ids.length) {
+    const placeholders = ids.map((_, i) => `?${i + 1}`).join(',')
+    const found = await db
+      .prepare(`SELECT id, name, stock, no_stock FROM products WHERE id IN (${placeholders})`)
+      .bind(...ids)
+      .all<{ id: number; name: string; stock: number; no_stock: number }>()
+    map = new Map((found.results ?? []).map((p) => [p.id, p]))
+  }
 
   // 库存校验：本单原有出库量先"还回"，新数量不能超过剩余可用
-  const old = await db.prepare('SELECT product_id, qty FROM sale_items WHERE sale_id = ?1').bind(id).all<{ product_id: number; qty: number }>()
+  const old = await db.prepare('SELECT product_id, qty FROM sale_items WHERE sale_id = ?1 AND product_id > 0').bind(id).all<{ product_id: number; qty: number }>()
   const oldQty = new Map<number, number>()
   for (const it of old.results ?? []) oldQty.set(it.product_id, (oldQty.get(it.product_id) || 0) + Number(it.qty))
 
-  const costMap = await db
-    .prepare(`SELECT id, avg_cost FROM products WHERE id IN (${placeholders})`)
-    .bind(...ids)
-    .all<{ id: number; avg_cost: number }>()
-  const costOf = new Map((costMap.results ?? []).map((p) => [p.id, p.avg_cost]))
+  let costOf = new Map<number, number>()
+  if (ids.length) {
+    const costPlaceholders = ids.map((_, i) => `?${i + 1}`).join(',')
+    const costMap = await db
+      .prepare(`SELECT id, avg_cost FROM products WHERE id IN (${costPlaceholders})`)
+      .bind(...ids)
+      .all<{ id: number; avg_cost: number }>()
+    costOf = new Map((costMap.results ?? []).map((p) => [p.id, p.avg_cost]))
+  }
 
-  for (const it of items) {
+  for (const it of stockItems) {
     const p = map.get(Number(it.product_id))
     if (!p) return c.json({ error: '明细中存在不存在的商品' }, 422)
     const price = Number(it.unit_price)
@@ -81,13 +98,20 @@ app.put('/sales/:id', async (c) => {
   const stmts: D1PreparedStatement[] = [
     salesUpdate,
     db.prepare('DELETE FROM sale_items WHERE sale_id = ?1').bind(id),
-    ...items.map((it) =>
-      db
+    ...items.map((it) => {
+      if (!Number(it.product_id)) {
+        return db
+          .prepare(
+            `INSERT INTO sale_items (sale_id, product_id, name, qty, unit_price, unit_cost) VALUES (?1, 0, ?2, ?3, ?4, ?5)`
+          )
+          .bind(id, (it.name ?? '').trim(), Number(it.qty), Number(it.unit_price), Math.max(0, Number(it.unit_cost) || 0))
+      }
+      return db
         .prepare(
-          `INSERT INTO sale_items (sale_id, product_id, qty, unit_price, unit_cost) VALUES (?1, ?2, ?3, ?4, ?5)`
+          `INSERT INTO sale_items (sale_id, product_id, name, qty, unit_price, unit_cost) VALUES (?1, ?2, '', ?3, ?4, ?5)`
         )
         .bind(id, Number(it.product_id), Number(it.qty), Number(it.unit_price), costOf.get(Number(it.product_id)) ?? 0)
-    ),
+    }),
   ]
   await db.batch(stmts)
   await recomputeAll(db)
@@ -134,8 +158,8 @@ app.get('/sales/:id', async (c) => {
   if (!sale) return c.json({ error: '销售单不存在' }, 404)
   const items = await db
     .prepare(
-      `SELECT si.*, p.name AS product_name, p.sku, p.unit
-       FROM sale_items si JOIN products p ON p.id = si.product_id
+      `SELECT si.*, CASE WHEN si.product_id = 0 THEN si.name ELSE p.name END AS product_name, p.sku, p.unit
+       FROM sale_items si LEFT JOIN products p ON p.id = si.product_id
        WHERE si.sale_id = ?1 ORDER BY si.id`
     )
     .bind(id)
@@ -159,18 +183,32 @@ app.post('/sales', async (c) => {
     items?: ItemInput[]
   }>()
   const kind = b.kind === 'return' ? 'return' : 'normal'
-  const items = (b.items ?? []).filter((it) => Number(it.qty) > 0)
-  if (!items.length) return c.json({ error: '至少需要一条明细' }, 422)
+  const allItems = (b.items ?? []).filter((it) => Number(it.qty) > 0)
+  // 手填项：无 product_id 但有名称（不入库商品/服务，不扣库存，成本手填）
+  const manualItems = allItems.filter((it) => !Number(it.product_id))
+  const stockItems = allItems.filter((it) => Number(it.product_id))
+  if (!allItems.length) return c.json({ error: '至少需要一条明细' }, 422)
+  for (const it of manualItems) {
+    if (!(it.name ?? '').trim()) return c.json({ error: '手填项需要填写名称' }, 422)
+    const price = Number(it.unit_price)
+    if (!Number.isFinite(price) || price < 0) return c.json({ error: '销售单价不能为负数' }, 422)
+    const cost = Number(it.unit_cost)
+    if (Number.isFinite(cost) && cost < 0) return c.json({ error: '手填项成本不能为负数' }, 422)
+  }
+  const items = allItems
 
-  const ids = [...new Set(items.map((it) => Number(it.product_id)))]
+  const ids = [...new Set(stockItems.map((it) => Number(it.product_id)))]
   if (ids.some((x) => !Number.isInteger(x) || x <= 0)) return c.json({ error: '明细中商品不合法' }, 422)
-  const placeholders = ids.map((_, i) => `?${i + 1}`).join(',')
-  const found = await db
-    .prepare(`SELECT id, name, stock, avg_cost, sale_price, no_stock FROM products WHERE id IN (${placeholders})`)
-    .bind(...ids)
-    .all<{ id: number; name: string; stock: number; avg_cost: number; sale_price: number; no_stock: number }>()
-  const map = new Map((found.results ?? []).map((p) => [p.id, p]))
-  for (const it of items) {
+  let map = new Map<number, { id: number; name: string; stock: number; avg_cost: number; sale_price: number; no_stock: number }>()
+  if (ids.length) {
+    const placeholders = ids.map((_, i) => `?${i + 1}`).join(',')
+    const found = await db
+      .prepare(`SELECT id, name, stock, avg_cost, sale_price, no_stock FROM products WHERE id IN (${placeholders})`)
+      .bind(...ids)
+      .all<{ id: number; name: string; stock: number; avg_cost: number; sale_price: number; no_stock: number }>()
+    map = new Map((found.results ?? []).map((p) => [p.id, p]))
+  }
+  for (const it of stockItems) {
     const p = map.get(Number(it.product_id))
     if (!p) return c.json({ error: '明细中存在不存在的商品' }, 422)
     const price = Number(it.unit_price)
@@ -220,15 +258,23 @@ app.post('/sales', async (c) => {
   const stmts: D1PreparedStatement[] = [
     saleInsert,
     ...items.map((it) => {
+      if (!Number(it.product_id)) {
+        return db
+          .prepare(
+            `INSERT INTO sale_items (sale_id, product_id, name, qty, unit_price, unit_cost)
+             VALUES ((SELECT MAX(id) FROM sales), 0, ?1, ?2, ?3, ?4)`
+          )
+          .bind((it.name ?? '').trim(), Number(it.qty), Number(it.unit_price), Math.max(0, Number(it.unit_cost) || 0))
+      }
       const p = map.get(Number(it.product_id))!
       return db
         .prepare(
-          `INSERT INTO sale_items (sale_id, product_id, qty, unit_price, unit_cost)
-           VALUES ((SELECT MAX(id) FROM sales), ?1, ?2, ?3, ?4)`
+          `INSERT INTO sale_items (sale_id, product_id, name, qty, unit_price, unit_cost)
+           VALUES ((SELECT MAX(id) FROM sales), ?1, '', ?2, ?3, ?4)`
         )
         .bind(Number(it.product_id), Number(it.qty), Number(it.unit_price), p.avg_cost)
     }),
-    ...items
+    ...stockItems
       .filter((it) => !map.get(Number(it.product_id))!.no_stock)
       .map((it) =>
         db

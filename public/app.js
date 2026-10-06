@@ -210,6 +210,7 @@ const app = createApp({
     saleNet() { return Math.max(0, this.saleTotal - Number(this.saleForm.discount || 0)) },
     saleProfit() {
       return this.saleForm.items.reduce((s, it) => {
+        if (it.manual) return s + (Number(it.price) - Number(it.cost || 0)) * Number(it.qty || 0)
         const p = this.productMap[it.product_id]
         return s + (p ? (Number(it.price) - p.avg_cost) * Number(it.qty || 0) : 0)
       }, 0)
@@ -1028,6 +1029,7 @@ const app = createApp({
 
     // ===== 采购 / 销售 =====
     addRow(form) { form.items.push({ product_id: '', qty: '', price: '' }) },
+    addManualRow(form) { form.items.push({ manual: true, name: '', qty: '', price: '', cost: '' }) },
     delRow(form, i) { form.items.splice(i, 1) },
     onProductChange(form, row, id) {
       const p = this.productMap[id !== undefined ? id : row.product_id]
@@ -1047,9 +1049,13 @@ const app = createApp({
     },
     async submitOrder(kind) {
       const form = kind === 'purchase' ? this.purchaseForm : this.saleForm
+      const validManual = kind === 'sales' ? form.items.filter((it) => it.manual && (it.name || '').trim() && Number(it.qty) > 0) : []
+      if (validManual.some((it) => Number(it.price) < 0)) return this.toast('销售单价不能为负数', 'err')
+      if (validManual.some((it) => Number(it.cost) < 0)) return this.toast('手填项成本不能为负数', 'err')
       const items = form.items
         .filter((it) => it.product_id && Number(it.qty) > 0)
         .map((it) => ({ product_id: Number(it.product_id), qty: Number(it.qty), unit_cost: Number(it.price) || 0, unit_price: Number(it.price) || 0 }))
+        .concat(validManual.map((it) => ({ product_id: 0, name: it.name.trim(), qty: Number(it.qty), unit_price: Number(it.price) || 0, unit_cost: Number(it.cost) || 0 })))
       if (!items.length) return this.toast('请至少填写一条明细（选商品、填数量）', 'err')
       if (Number(form.paid || 0) > 0 && !form.account_id) return this.toast('本次收/付款需要选择结算账户', 'err')
       const base = { note: form.note, discount: Number(form.discount || 0), paid: Number(form.paid || 0), account_id: form.account_id || null, doc_date: form.date || '' }
@@ -1151,10 +1157,17 @@ const app = createApp({
           paid: Number(full.paid) || 0,
           account_id: full.account_id || '',
           date: dstr(new Date(full.created_at)),
-          items: (full.items || []).map(it => ({
+          items: (full.items || []).map(it => it.product_id ? ({
             product_id: it.product_id,
             qty: Number(it.qty),
             price: Number(kind === 'sales' ? it.unit_price : it.unit_cost),
+            origQty: Number(it.qty),
+          }) : ({
+            manual: true,
+            name: it.product_name || it.name || '',
+            qty: Number(it.qty),
+            price: Number(it.unit_price),
+            cost: Number(it.unit_cost) || 0,
             origQty: Number(it.qty),
           })),
         }
@@ -1169,9 +1182,11 @@ const app = createApp({
     },
     async saveOrderEdit() {
       const m = this.orderEdit
+      const validManual = m.kind === 'sales' ? m.items.filter(it => it.manual && (it.name || '').trim() && Number(it.qty) > 0) : []
       const items = m.items
         .filter(it => it.product_id && Number(it.qty) > 0)
         .map(it => ({ product_id: Number(it.product_id), qty: Number(it.qty), unit_price: Number(it.price) || 0, unit_cost: Number(it.price) || 0 }))
+        .concat(validManual.map(it => ({ product_id: 0, name: it.name.trim(), qty: Number(it.qty), unit_price: Number(it.price) || 0, unit_cost: Number(it.cost) || 0 })))
       if (!items.length) return this.toast('请至少填写一条明细', 'err')
       if (Number(m.paid || 0) > 0 && !m.account_id) return this.toast('本次收/付款需要选择结算账户', 'err')
       const pool = m.kind === 'sales' ? this.customers : this.suppliers

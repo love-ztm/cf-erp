@@ -372,14 +372,22 @@
             </div>
             <div class="table-wrap">
               <table class="items-edit">
-                <thead><tr><th style="min-width:200px">商品</th><th>数量</th><th>单价（售价）</th><th class="num">小计</th><th></th></tr></thead>
+                <thead><tr><th style="min-width:200px">商品</th><th>数量</th><th>单价（售价）</th><th>成本</th><th class="num">小计</th><th></th></tr></thead>
                 <tbody>
                   <tr v-for="(it, i) in saleForm.items" :key="i">
                     <td style="min-width:230px">
-                      <product-picker v-model="it.product_id" :products="activeProducts" mode="sale" @update:model-value="onProductChange(saleForm, it, $event)" />
+                      <div v-if="it.manual" style="display:flex; align-items:center; gap:6px">
+                        <input v-model="it.name" placeholder="手填项名称（不入库商品/服务）" style="flex:1" />
+                        <span class="badge gray" style="flex-shrink:0">手填</span>
+                      </div>
+                      <product-picker v-else v-model="it.product_id" :products="activeProducts" mode="sale" @update:model-value="onProductChange(saleForm, it, $event)" />
                     </td>
-                    <td><input type="number" min="0" step="any" v-model.number="it.qty" style="width:95px" /></td>
-                    <td><input type="number" min="0" step="0.01" v-model.number="it.price" style="width:115px" /></td>
+                    <td><input type="number" min="0" step="any" v-model.number="it.qty" style="width:85px" /></td>
+                    <td><input type="number" min="0" step="0.01" v-model.number="it.price" style="width:105px" /></td>
+                    <td>
+                      <input v-if="it.manual" type="number" min="0" step="0.01" v-model.number="it.cost" style="width:105px" placeholder="无则0" />
+                      <span v-else class="text-muted" style="font-size:12px">{{ money((productMap[it.product_id] || {}).avg_cost || 0) }}</span>
+                    </td>
                     <td class="num">{{ money(it.qty * it.price) }}</td>
                     <td><button class="del-row" @click="delRow(saleForm, i)">×</button></td>
                   </tr>
@@ -397,6 +405,7 @@
               <span class="text-muted">预计毛利</span>
               <strong :class="saleProfit - Number(saleForm.discount || 0) >= 0 ? 'text-green' : 'text-danger'">{{ money(saleProfit - Number(saleForm.discount || 0)) }}</strong>
               <button @click="addRow(saleForm)">＋ 加一行</button>
+              <button @click="addManualRow(saleForm)">＋ 手填项</button>
               <button @click="addNewProduct('saleForm')">＋ 新商品</button>
               <button class="btn-primary" :disabled="submitting" @click="submitOrder('sales')">提交出库</button>
             </div>
@@ -1576,6 +1585,7 @@
                 <th style="min-width:220px">商品</th>
                 <th>数量</th>
                 <th>{{ orderEdit.kind === 'sales' ? '售价' : '进价' }}</th>
+                <th>成本</th>
                 <th class="num">小计</th>
                 <th></th>
               </tr>
@@ -1583,10 +1593,18 @@
             <tbody>
               <tr v-for="(it, i) in orderEdit.items" :key="i">
                 <td>
-                  <product-picker v-model="it.product_id" :products="orderEdit.kind === 'sales' ? activeProducts : purchasableProducts" :mode="orderEdit.kind" @update:model-value="onProductChangeEdit(it, $event)" />
+                  <div v-if="it.manual" style="display:flex; align-items:center; gap:6px">
+                    <input v-model="it.name" placeholder="手填项名称（不入库商品/服务）" style="flex:1" />
+                    <span class="badge gray" style="flex-shrink:0">手填</span>
+                  </div>
+                  <product-picker v-else v-model="it.product_id" :products="orderEdit.kind === 'sales' ? activeProducts : purchasableProducts" :mode="orderEdit.kind" @update:model-value="onProductChangeEdit(it, $event)" />
                 </td>
-                <td><input type="number" min="0" step="any" v-model.number="it.qty" style="width:95px" /></td>
-                <td><input type="number" min="0" step="0.01" v-model.number="it.price" style="width:115px" /></td>
+                <td><input type="number" min="0" step="any" v-model.number="it.qty" style="width:85px" /></td>
+                <td><input type="number" min="0" step="0.01" v-model.number="it.price" style="width:105px" /></td>
+                <td>
+                  <input v-if="it.manual" type="number" min="0" step="0.01" v-model.number="it.cost" style="width:105px" placeholder="无则0" />
+                  <span v-else class="text-muted" style="font-size:12px">{{ money((productMap[it.product_id] || {}).avg_cost || 0) }}</span>
+                </td>
                 <td class="num">{{ money(it.qty * it.price) }}</td>
                 <td><button class="del-row" @click="delRowEdit(i)">×</button></td>
               </tr>
@@ -1601,6 +1619,7 @@
           <span class="text-muted">合计 {{ money(orderEdit.items.reduce((s, it) => s + Number(it.qty||0)*Number(it.price||0), 0)) }}</span>
           <span class="text-muted">净额 {{ money(Math.max(0, orderEdit.items.reduce((s, it) => s + Number(it.qty||0)*Number(it.price||0), 0) - Number(orderEdit.discount||0))) }}</span>
           <button @click="addRowEdit">＋ 加一行</button>
+          <button v-if="orderEdit.kind === 'sales'" @click="orderEdit.items.push({ manual: true, name: '', qty: '', price: '', cost: '', origQty: 0 })">＋ 手填项</button>
           <button @click="orderEdit = null">取消</button>
           <button class="btn-primary" :disabled="submitting" @click="saveOrderEdit">保存修改</button>
         </div>

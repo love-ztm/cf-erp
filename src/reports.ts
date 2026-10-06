@@ -14,7 +14,7 @@ function range(c: { req: { query: (k: string) => string | undefined } }): { from
 app.get('/reports/profit', async (c) => {
   const db = c.env.DB
   const { from, to } = range(c)
-  const [byProduct, daily, discountAgg, repairAgg] = await Promise.all([
+  const [byProduct, daily, discountAgg, repairAgg, manualSaleAgg] = await Promise.all([
     db
       .prepare(
         `SELECT si.product_id, p.name, p.unit,
@@ -59,6 +59,15 @@ app.get('/reports/profit', async (c) => {
       )
       .bind(from, to)
       .first<{ n: number; revenue: number; discount: number; cost: number }>(),
+    db
+      .prepare(
+        `SELECT COALESCE(SUM(CASE WHEN s.kind = 'normal' THEN si.qty * si.unit_price ELSE -si.qty * si.unit_price END), 0) AS revenue,
+                COALESCE(SUM(CASE WHEN s.kind = 'normal' THEN si.qty * si.unit_cost ELSE -si.qty * si.unit_cost END), 0) AS cost
+         FROM sale_items si JOIN sales s ON s.id = si.sale_id
+         WHERE si.product_id = 0 AND s.created_at >= ?1 AND s.created_at < ?2`
+      )
+      .bind(from, to)
+      .first<{ revenue: number; cost: number }>(),
   ])
   const rows = (byProduct.results ?? []).map((r) => ({
     ...r,
@@ -70,16 +79,20 @@ app.get('/reports/profit', async (c) => {
   const netDiscount = round2(discountAgg?.net_discount ?? 0)
   const repNet = round2((repairAgg?.revenue ?? 0) - (repairAgg?.discount ?? 0))
   const repCost = round2(repairAgg?.cost ?? 0)
+  // 手填项销售（不入库商品/服务）计入毛利总额，但不出现在按商品明细行中
+  const manualRevenue = round2(manualSaleAgg?.revenue ?? 0)
+  const manualCost = round2(manualSaleAgg?.cost ?? 0)
   return c.json({
     from,
     to,
     rows,
     daily: daily.results ?? [],
     discount: netDiscount,
+    manualSale: { revenue: manualRevenue, cost: manualCost, profit: round2(manualRevenue - manualCost) },
     total: {
-      revenue: round2(gross.revenue),
-      cost: round2(gross.cost),
-      profit: round2(gross.revenue - gross.cost - netDiscount),
+      revenue: round2(gross.revenue + manualRevenue),
+      cost: round2(gross.cost + manualCost),
+      profit: round2(gross.revenue + manualRevenue - gross.cost - manualCost - netDiscount),
     },
     repair: {
       n: repairAgg?.n ?? 0,
