@@ -98,14 +98,14 @@
               </div>
               <div class="stat-card purple">
                 <div class="stat-header">
-                  <span class="stat-label">资产池 · 账户总余额</span>
+                  <span class="stat-label">经营利润汇总 · 本期</span>
                   <span style="display:flex; align-items:center; gap:6px">
-                    <span class="stat-tag">实时</span>
+                    <span class="stat-tag">毛利合计</span>
                     <button type="button" @click="toggleBalance" :title="hideBalance ? '点击显示金额' : '点击隐藏金额'" style="background:none; border:none; cursor:pointer; padding:0 2px; font-size:14px; line-height:1; color:inherit; opacity:.65">{{ hideBalance ? '👁' : '🙈' }}</button>
                   </span>
                 </div>
-                <div class="stat-value purple">{{ hideBalance ? '¥ ＊＊＊＊＊' : money(dash.money.accountTotal) }}</div>
-                <div class="stat-sub">{{ dash.counts.accounts }} 个结算账户流动资金{{ hideBalance ? '（金额已隐藏）' : '' }}</div>
+                <div class="stat-value purple">{{ hideBalance ? '¥ ＊＊＊＊＊' : money((dash.sales?.profit || 0) + (dash.repair?.profit || 0) + (dash.money?.otherNet || 0)) }}</div>
+                <div class="stat-sub">商品毛利 {{ money(dash.sales?.profit || 0) }} · 维修毛利 {{ money(dash.repair?.profit || 0) }} · 其他收支净额 {{ money(dash.money?.otherNet || 0) }}{{ hideBalance ? '（金额已隐藏）' : '' }}</div>
               </div>
             </div>
 

@@ -201,7 +201,7 @@ app.get('/reports/otherfunds', async (c) => {
 app.get('/dashboard', async (c) => {
   const db = c.env.DB
   const { from, to } = range(c)
-  const [salesAgg, discountAgg, purchaseAgg, money, counts, recentSales, recentPurchases, lowStock] = await Promise.all([
+  const [salesAgg, discountAgg, purchaseAgg, money, counts, recentSales, recentPurchases, lowStock, repairAgg] = await Promise.all([
     db
       .prepare(
         `SELECT COUNT(DISTINCT CASE WHEN s.kind = 'normal' THEN s.id END) AS orders,
@@ -252,6 +252,14 @@ app.get('/dashboard', async (c) => {
     db
       .prepare('SELECT id, name, unit, stock, low_stock FROM products WHERE low_stock > 0 AND stock <= low_stock AND archived = 0 ORDER BY stock LIMIT 20')
       .all(),
+    db
+      .prepare(
+        `SELECT COALESCE(SUM(r.fee + r.parts_total - r.discount), 0) AS revenue,
+                COALESCE(SUM((SELECT COALESCE(SUM(ri.qty * ri.unit_cost), 0) FROM repair_items ri WHERE ri.repair_id = r.id)), 0) AS cost
+         FROM repairs r WHERE r.created_at >= ?1 AND r.created_at < ?2`
+      )
+      .bind(from, to)
+      .first<{ revenue: number; cost: number }>(),
   ])
   const gross = round2(salesAgg?.gross ?? 0)
   const cost = round2(salesAgg?.cost ?? 0)
@@ -264,6 +272,10 @@ app.get('/dashboard', async (c) => {
       customerDebt: round2(money?.customer_debt ?? 0),
       supplierDebt: round2(money?.supplier_debt ?? 0),
       otherNet: round2((money?.other_income ?? 0) - (money?.other_expense ?? 0)),
+    },
+    repair: {
+      orders: 0,
+      profit: round2((repairAgg?.revenue ?? 0) - (repairAgg?.cost ?? 0)),
     },
     lowStock: lowStock.results ?? [],
     counts: counts ?? { products: 0, parties: 0, accounts: 0 },
