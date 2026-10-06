@@ -28,14 +28,14 @@
         <p>{{ company.company_name || '企业进销存管理系统' }} · 进销存 · 资金 · 报表</p>
         <form @submit.prevent="login">
           <div class="form-row">
-            <label>登录账号</label>
-            <input v-model="loginUser" placeholder="admin 或员工账号" autofocus />
+            <label style="display:block; text-align:center">登录账号</label>
+            <input v-model="loginUser" style="text-align:center" autofocus />
           </div>
           <div class="form-row">
-            <label>登录密码</label>
-            <input type="password" v-model="loginPwd" placeholder="请输入密码" />
+            <label style="display:block; text-align:center">登录密码</label>
+            <input type="password" v-model="loginPwd" style="text-align:center" />
           </div>
-          <div v-if="loginErr" class="text-danger" style="margin-bottom:10px">{{ loginErr }}</div>
+          <div v-if="loginErr" class="text-danger" style="margin-bottom:10px; text-align:center">{{ loginErr }}</div>
           <button class="btn-primary" style="width:100%" type="submit">登 录</button>
         </form>
       </div>
