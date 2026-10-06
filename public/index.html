@@ -471,7 +471,7 @@
                     </td>
                     <td style="white-space:nowrap">
                       <button class="btn-sm" @click="printRepair(r)">查看/打印</button>
-                      <button v-if="r.status !== 'closed'" class="btn-sm" @click="openRepairModal(r)">修改</button>
+                      <button class="btn-sm" @click="openRepairModal(r)">修改</button>
                       <button v-if="r.status === 'repairing'" class="btn-sm" @click="setRepairStatus(r, 'done')">完成</button>
                       <button v-if="r.status === 'done'" class="btn-sm" @click="setRepairStatus(r, 'closed')">取机</button>
                       <button class="btn-sm btn-danger" @click="delRepair(r.id)">删除</button>
