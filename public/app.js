@@ -39,14 +39,14 @@ function exportCSV(filename, headers, rows) {
 }
 
 const NAV = [
-  { key: 'dashboard', label: '概览', icon: '◉' },
+  { key: 'dashboard', label: '数据概览', icon: '◉' },
   { key: 'products', label: '商品管理', icon: '⊞' },
   { key: 'purchase', label: '采购入库', icon: '↓' },
   { key: 'sales', label: '销售出库', icon: '↑' },
-  { key: 'repairs', label: '维修单', icon: '🔧' },
+  { key: 'repairs', label: '维修管理', icon: '🔧' },
   { key: 'stock', label: '库存查询', icon: '▤' },
-  { key: 'funds', label: '资金', icon: '¥' },
-  { key: 'reports', label: '报表', icon: '▦' },
+  { key: 'funds', label: '资金账户', icon: '¥' },
+  { key: 'reports', label: '报表中心', icon: '▦' },
   { key: 'parties', label: '往来单位', icon: '☰' },
   { key: 'settings', label: '系统设置', icon: '⚙' }
 ]
