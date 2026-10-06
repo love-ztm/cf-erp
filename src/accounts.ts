@@ -62,7 +62,9 @@ app.get('/funds', async (c) => {
   const db = c.env.DB
   const limit = Math.min(500, Number(c.req.query('limit')) || 200)
   const type = c.req.query('type') || ''
-  // 资金日记账 = funds 流水 + 单据内的收付款与退货退款（便于对账）
+  const from = (c.req.query('from') || '').trim()
+  const to = (c.req.query('to') || '').trim()
+  // 资金日记账 = funds 流水 + 单据内的收付款与退货退款（便于对账）；支持类型与日期范围筛选
   const res = await db
     .prepare(
       `SELECT * FROM (
@@ -77,9 +79,10 @@ app.get('/funds', async (c) => {
          UNION ALL
          SELECT r.id, 'repair_paid', r.customer_id, r.customer_name, r.account_id, r.paid, r.note, r.created_at, 'normal', r.id
            FROM repairs r WHERE r.paid > 0 AND (?1 = '' OR 'repair_paid' = ?1)
-       ) ORDER BY created_at DESC LIMIT ?2`
+       ) WHERE (?3 = '' OR created_at >= ?3) AND (?4 = '' OR created_at < ?4)
+       ORDER BY created_at DESC LIMIT ?2`
     )
-    .bind(type, limit)
+    .bind(type, limit, from, to)
     .all()
   return c.json(res.results ?? [])
 })

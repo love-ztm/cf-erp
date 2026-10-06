@@ -98,6 +98,10 @@ const app = createApp({
       // 采购/销售记录筛选（默认当月；留空显示全部）
       ordFrom: monthStartStr(),
       ordTo: todayStr(),
+      // 资金流水筛选（默认当月 + 全部类型）
+      fundFrom: monthStartStr(),
+      fundTo: todayStr(),
+      fundTypeFilter: '',
 
       // 商品
       prodSearch: '',
@@ -850,10 +854,37 @@ const app = createApp({
       }
     },
     async loadFunds() {
-      const [accounts, funds, parties] = await Promise.all([api('/accounts'), api('/funds'), api('/parties')])
+      let qs = ''
+      if (this.fundFrom && this.fundTo) {
+        const r = rangeISO(this.fundFrom, this.fundTo)
+        qs = `?from=${encodeURIComponent(r.from)}&to=${encodeURIComponent(r.to)}`
+      }
+      if (this.fundTypeFilter) qs += (qs ? '&' : '?') + 'type=' + this.fundTypeFilter
+      const [accounts, funds, parties] = await Promise.all([api('/accounts'), api('/funds' + qs), api('/parties')])
       this.accounts = accounts
       this.funds = funds
       this.parties = parties
+    },
+    // 资金流水快捷区间：month 当月 / prev 上月 / all 全部
+    setFundRange(mode) {
+      if (mode === 'all') {
+        this.fundFrom = ''
+        this.fundTo = ''
+      } else if (mode === 'prev') {
+        const d = new Date()
+        d.setDate(1)
+        d.setMonth(d.getMonth() - 1)
+        this.fundFrom = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-01'
+        this.fundTo = dstr(new Date(d.getFullYear(), d.getMonth() + 1, 0))
+      } else {
+        this.fundFrom = monthStartStr()
+        this.fundTo = todayStr()
+      }
+      this.loadFunds()
+    },
+    setFundTypeFilter(t) {
+      this.fundTypeFilter = t
+      this.loadFunds()
     },
     async loadMoves() {
       const q = this.movesProduct ? '?product_id=' + this.movesProduct : ''

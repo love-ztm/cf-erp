@@ -708,6 +708,19 @@
               <button class="btn-sm" @click="openFundModal('income')">其他收入</button>
               <button class="btn-sm" @click="openFundModal('expense')">其他支出</button>
             </div>
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:12px 0">
+              <input type="date" v-model="fundFrom" style="width:145px" @change="loadFunds" />
+              <span class="text-muted">至</span>
+              <input type="date" v-model="fundTo" style="width:145px" @change="loadFunds" />
+              <button type="button" class="btn-sm" @click="setFundRange('month')">本月</button>
+              <button type="button" class="btn-sm" @click="setFundRange('prev')">上月</button>
+              <button type="button" class="btn-sm" @click="setFundRange('all')">全部</button>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:12px">
+              <button type="button" class="btn-sm" :class="{ 'btn-primary': !fundTypeFilter }" @click="setFundTypeFilter('')">全部类型</button>
+              <button v-for="t in ['receipt','payment','income','expense','sale_paid','purchase_paid','repair_paid','sale_return','purchase_return']" :key="t" type="button" class="btn-sm" :class="{ 'btn-primary': fundTypeFilter === t }" @click="setFundTypeFilter(t)">{{ fundLabel(t) }}</button>
+              <span class="text-muted" style="font-size:12px">共 {{ funds.length }} 笔</span>
+            </div>
             <div class="table-wrap">
               <table class="click-rows">
                 <thead><tr><th>时间</th><th>类型</th><th>往来单位</th><th>金额</th><th>备注</th><th>操作</th></tr></thead>
