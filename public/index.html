@@ -105,7 +105,7 @@
                   </span>
                 </div>
                 <div class="stat-value purple">{{ hideBalance ? '¥ ＊＊＊＊＊' : money((dash.sales?.profit || 0) + (dash.repair?.profit || 0) + (dash.money?.otherNet || 0)) }}</div>
-                <div v-if="!hideBalance" class="stat-sub">商品毛利 ＋ 维修毛利 ＋ 其他收支净额</div>
+                <div v-if="!hideBalance" class="stat-sub">商品毛利 {{ money(dash.sales?.profit || 0) }} · 维修毛利 {{ money(dash.repair?.profit || 0) }} · 其他收支净额 {{ money(dash.money?.otherNet || 0) }}</div>
               </div>
             </div>
 
