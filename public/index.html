@@ -1625,6 +1625,11 @@
             </div>
           </div>
 
+          <div class="print-remark" v-if="printDoc.remark">
+            <div class="remark-title">{{ printDoc.remarkLabel || '备注' }}</div>
+            <div class="remark-body">{{ printDoc.remark }}</div>
+          </div>
+
           <table v-if="printDoc.table" class="print-table">
             <thead>
               <tr><th v-for="h in printDoc.table.head" :key="h">{{ h }}</th></tr>

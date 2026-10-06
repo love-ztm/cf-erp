@@ -823,9 +823,10 @@ const app = createApp({
             ['电话', d.phone || '—'],
             ['设备型号', d.device || '—'],
             ['故障描述', d.fault || '—'],
-            ['维修说明', d.solution || '—'],
             ['状态', this.repairStatusLabel(d.status)],
           ],
+          remarkLabel: '维修说明',
+          remark: d.solution || '',
           table: rows.length ? { head: ['配件项目', '数量', '单价', '小计'], rows } : null,
           totals: [
             ['维修费', this.money(d.fee)],
