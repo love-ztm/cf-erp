@@ -1221,7 +1221,7 @@ const app = createApp({
       const sign = d.kind === 'return' ? -1 : 1
       const rows = d.items.map(it => [
         it.product_name + (it.sku ? '（' + it.sku + '）' : ''),
-        this.qfmt(it.qty) + ' ' + it.unit,
+        this.qfmt(it.qty) + (it.unit ? ' ' + it.unit : ''),
         this.money(isPur ? it.unit_cost : it.unit_price),
         this.money(sign * (isPur ? it.qty * it.unit_cost : it.qty * it.unit_price)),
       ])
