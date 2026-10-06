@@ -155,10 +155,11 @@ CREATE TABLE IF NOT EXISTS repairs (
 CREATE TABLE IF NOT EXISTS repair_items (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   repair_id  INTEGER NOT NULL,
-  product_id INTEGER NOT NULL,
+  product_id INTEGER NOT NULL,   -- 0 = 手填件（未入库商品/拆机件），名称存 name
+  name       TEXT DEFAULT '',    -- 手填件名称
   qty        REAL NOT NULL,
   unit_price REAL NOT NULL,
-  unit_cost  REAL NOT NULL   -- 领用时的加权平均成本快照
+  unit_cost  REAL NOT NULL   -- 领用时的加权平均成本快照（手填件为 0）
 );
 CREATE INDEX IF NOT EXISTS idx_ritems_repair  ON repair_items(repair_id);
 CREATE INDEX IF NOT EXISTS idx_ritems_product ON repair_items(product_id);

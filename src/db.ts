@@ -53,6 +53,8 @@ const MIGRATIONS: Array<[string, Record<string, string>]> = [
       permissions: "TEXT NOT NULL DEFAULT '[]'",
     },
   ],
+  // 手填配件（未入库商品/拆机件）：product_id = 0，名称存 name
+  ['repair_items', { name: "TEXT DEFAULT ''" }],
 ]
 
 async function ensureColumns(db: D1Database, table: string, cols: Record<string, string>) {

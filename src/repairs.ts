@@ -3,7 +3,7 @@ import { recomputeAll, round2, docDateToISO } from './db'
 
 const app = new Hono<{ Bindings: Env }>()
 
-type ItemInput = { product_id?: number; qty?: number; unit_price?: number }
+type ItemInput = { product_id?: number; name?: string; qty?: number; unit_price?: number }
 
 // 列表：支持日期范围与状态筛选（日期为 UTC ISO 边界，created_at 定宽文本直接比较）
 app.get('/repairs', async (c) => {
@@ -34,7 +34,7 @@ app.get('/repairs/:id', async (c) => {
   if (!repair) return c.json({ error: '维修单不存在' }, 404)
   const items = await db
     .prepare(
-      `SELECT ri.*, p.name AS product_name FROM repair_items ri
+      `SELECT ri.*, CASE WHEN ri.product_id = 0 THEN ri.name ELSE p.name END AS product_name FROM repair_items ri
        LEFT JOIN products p ON p.id = ri.product_id WHERE ri.repair_id = ?1 ORDER BY ri.id`
     )
     .bind(id)
@@ -59,8 +59,16 @@ app.post('/repairs', async (c) => {
     doc_date?: string
     items?: ItemInput[]
   }>()
-  const items = (b.items ?? []).filter((it) => Number(it.qty) > 0)
-  const ids = [...new Set(items.map((it) => Number(it.product_id)))]
+  const allItems = (b.items ?? []).filter((it) => Number(it.qty) > 0)
+  // 手填件：无 product_id 但有名称（未入库商品/拆机件，不动库存）
+  const manualItems = allItems.filter((it) => !Number(it.product_id))
+  const stockItems = allItems.filter((it) => Number(it.product_id))
+  for (const it of manualItems) {
+    if (!(it.name ?? '').trim()) return c.json({ error: '手填配件需要填写名称' }, 422)
+    const price = Number(it.unit_price)
+    if (!Number.isFinite(price) || price < 0) return c.json({ error: '配件单价不能为负数' }, 422)
+  }
+  const ids = [...new Set(stockItems.map((it) => Number(it.product_id)))]
   if (ids.some((x) => !Number.isInteger(x) || x <= 0)) return c.json({ error: '维修配件不合法' }, 422)
 
   let map = new Map<number, { id: number; stock: number; avg_cost: number; sale_price: number; no_stock: number; name: string }>()
@@ -72,7 +80,7 @@ app.post('/repairs', async (c) => {
       .all<{ id: number; name: string; stock: number; avg_cost: number; sale_price: number; no_stock: number }>()
     map = new Map((found.results ?? []).map((p) => [p.id, p]))
   }
-  for (const it of items) {
+  for (const it of stockItems) {
     const p = map.get(Number(it.product_id))
     if (!p) return c.json({ error: '明细中存在不存在的商品' }, 422)
     const price = Number(it.unit_price)
@@ -81,6 +89,7 @@ app.post('/repairs', async (c) => {
       return c.json({ error: `「${p.name}」库存不足：现有 ${p.stock}，需领用 ${Number(it.qty)}` }, 422)
     }
   }
+  const items = allItems
 
   const fee = Math.max(0, Number(b.fee) || 0)
   const partsTotal = round2(items.reduce((s, it) => s + Number(it.qty) * Number(it.unit_price), 0))
@@ -136,15 +145,23 @@ app.post('/repairs', async (c) => {
   const stmts: D1PreparedStatement[] = [
     repairInsert,
     ...items.map((it) => {
+      if (!Number(it.product_id)) {
+        return db
+          .prepare(
+            `INSERT INTO repair_items (repair_id, product_id, name, qty, unit_price, unit_cost)
+             VALUES ((SELECT MAX(id) FROM repairs), 0, ?1, ?2, ?3, 0)`
+          )
+          .bind((it.name ?? '').trim(), Number(it.qty), Number(it.unit_price))
+      }
       const p = map.get(Number(it.product_id))!
       return db
         .prepare(
-          `INSERT INTO repair_items (repair_id, product_id, qty, unit_price, unit_cost)
-           VALUES ((SELECT MAX(id) FROM repairs), ?1, ?2, ?3, ?4)`
+          `INSERT INTO repair_items (repair_id, product_id, name, qty, unit_price, unit_cost)
+           VALUES ((SELECT MAX(id) FROM repairs), ?1, '', ?2, ?3, ?4)`
         )
         .bind(Number(it.product_id), Number(it.qty), Number(it.unit_price), p.avg_cost)
     }),
-    ...items
+    ...stockItems
       .filter((it) => !map.get(Number(it.product_id))!.no_stock)
       .map((it) =>
         db
@@ -184,8 +201,15 @@ app.put('/repairs/:id', async (c) => {
     doc_date?: string
     items?: ItemInput[]
   }>()
-  const items = (b.items ?? []).filter((it) => Number(it.qty) > 0)
-  const ids = [...new Set(items.map((it) => Number(it.product_id)))]
+  const allItems = (b.items ?? []).filter((it) => Number(it.qty) > 0)
+  const manualItems = allItems.filter((it) => !Number(it.product_id))
+  const stockItems = allItems.filter((it) => Number(it.product_id))
+  for (const it of manualItems) {
+    if (!(it.name ?? '').trim()) return c.json({ error: '手填配件需要填写名称' }, 422)
+    const price = Number(it.unit_price)
+    if (!Number.isFinite(price) || price < 0) return c.json({ error: '配件单价不能为负数' }, 422)
+  }
+  const ids = [...new Set(stockItems.map((it) => Number(it.product_id)))]
   if (ids.some((x) => !Number.isInteger(x) || x <= 0)) return c.json({ error: '维修配件不合法' }, 422)
 
   let map = new Map<number, { id: number; avg_cost: number; no_stock: number; name: string }>()
@@ -197,12 +221,13 @@ app.put('/repairs/:id', async (c) => {
       .all<{ id: number; name: string; avg_cost: number; no_stock: number }>()
     map = new Map((found.results ?? []).map((p) => [p.id, p]))
   }
-  for (const it of items) {
+  for (const it of stockItems) {
     const p = map.get(Number(it.product_id))
     if (!p) return c.json({ error: '明细中存在不存在的商品' }, 422)
     const price = Number(it.unit_price)
     if (!Number.isFinite(price) || price < 0) return c.json({ error: '配件单价不能为负数' }, 422)
   }
+  const items = allItems
 
   const fee = Math.max(0, Number(b.fee) || 0)
   const partsTotal = round2(items.reduce((s, it) => s + Number(it.qty) * Number(it.unit_price), 0))
@@ -237,11 +262,19 @@ app.put('/repairs/:id', async (c) => {
     repairUpdate,
     db.prepare('DELETE FROM repair_items WHERE repair_id = ?1').bind(id),
     ...items.map((it) => {
+      if (!Number(it.product_id)) {
+        return db
+          .prepare(
+            `INSERT INTO repair_items (repair_id, product_id, name, qty, unit_price, unit_cost)
+             VALUES (?1, 0, ?2, ?3, ?4, 0)`
+          )
+          .bind(id, (it.name ?? '').trim(), Number(it.qty), Number(it.unit_price))
+      }
       const p = map.get(Number(it.product_id))!
       return db
         .prepare(
-          `INSERT INTO repair_items (repair_id, product_id, qty, unit_price, unit_cost)
-           VALUES (?1, ?2, ?3, ?4, ?5)`
+          `INSERT INTO repair_items (repair_id, product_id, name, qty, unit_price, unit_cost)
+           VALUES (?1, ?2, '', ?3, ?4, ?5)`
         )
         .bind(id, Number(it.product_id), Number(it.qty), Number(it.unit_price), p.avg_cost)
     }),

@@ -525,7 +525,11 @@
                 <tbody>
                   <tr v-for="(it, i) in repairForm.items" :key="i">
                     <td style="min-width:230px">
-                      <product-picker v-model="it.product_id" :products="purchasableProducts" mode="sale" @update:model-value="onRepairProductChange(it, $event)" />
+                      <div v-if="it.manual" style="display:flex; align-items:center; gap:6px">
+                        <input v-model="it.name" placeholder="手填配件名称（未入库/拆机件）" style="flex:1" />
+                        <span class="badge gray" style="flex-shrink:0">手填</span>
+                      </div>
+                      <product-picker v-else v-model="it.product_id" :products="purchasableProducts" mode="sale" @update:model-value="onRepairProductChange(it, $event)" />
                     </td>
                     <td><input type="number" min="0" step="any" v-model.number="it.qty" style="width:95px" /></td>
                     <td><input type="number" min="0" step="0.01" v-model.number="it.price" style="width:115px" /></td>
@@ -534,7 +538,11 @@
                   </tr>
                 </tbody>
               </table>
-              <button type="button" class="btn-sm" style="margin-top:8px" @click="repairAddItem">＋ 添加配件</button>
+              <div style="margin-top:8px; display:flex; gap:8px">
+                <button type="button" class="btn-sm" @click="repairAddItem">＋ 添加库存配件</button>
+                <button type="button" class="btn-sm" @click="repairAddManualItem">＋ 添加手填件</button>
+                <span class="text-muted" style="font-size:12px; align-self:center">手填件用于未入库的配件或拆机件，不扣库存</span>
+              </div>
             </div>
             <div class="form-grid" style="margin-top:14px">
               <div>
