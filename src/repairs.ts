@@ -3,7 +3,7 @@ import { recomputeAll, round2, docDateToISO } from './db'
 
 const app = new Hono<{ Bindings: Env }>()
 
-type ItemInput = { product_id?: number; name?: string; qty?: number; unit_price?: number }
+type ItemInput = { product_id?: number; name?: string; qty?: number; unit_price?: number; unit_cost?: number }
 
 // 列表：支持日期范围与状态筛选（日期为 UTC ISO 边界，created_at 定宽文本直接比较）
 app.get('/repairs', async (c) => {
@@ -67,6 +67,8 @@ app.post('/repairs', async (c) => {
     if (!(it.name ?? '').trim()) return c.json({ error: '手填配件需要填写名称' }, 422)
     const price = Number(it.unit_price)
     if (!Number.isFinite(price) || price < 0) return c.json({ error: '配件单价不能为负数' }, 422)
+    const cost = Number(it.unit_cost)
+    if (Number.isFinite(cost) && cost < 0) return c.json({ error: '配件成本不能为负数' }, 422)
   }
   const ids = [...new Set(stockItems.map((it) => Number(it.product_id)))]
   if (ids.some((x) => !Number.isInteger(x) || x <= 0)) return c.json({ error: '维修配件不合法' }, 422)
@@ -149,9 +151,9 @@ app.post('/repairs', async (c) => {
         return db
           .prepare(
             `INSERT INTO repair_items (repair_id, product_id, name, qty, unit_price, unit_cost)
-             VALUES ((SELECT MAX(id) FROM repairs), 0, ?1, ?2, ?3, 0)`
+             VALUES ((SELECT MAX(id) FROM repairs), 0, ?1, ?2, ?3, ?4)`
           )
-          .bind((it.name ?? '').trim(), Number(it.qty), Number(it.unit_price))
+          .bind((it.name ?? '').trim(), Number(it.qty), Number(it.unit_price), Math.max(0, Number(it.unit_cost) || 0))
       }
       const p = map.get(Number(it.product_id))!
       return db
@@ -208,6 +210,8 @@ app.put('/repairs/:id', async (c) => {
     if (!(it.name ?? '').trim()) return c.json({ error: '手填配件需要填写名称' }, 422)
     const price = Number(it.unit_price)
     if (!Number.isFinite(price) || price < 0) return c.json({ error: '配件单价不能为负数' }, 422)
+    const cost = Number(it.unit_cost)
+    if (Number.isFinite(cost) && cost < 0) return c.json({ error: '配件成本不能为负数' }, 422)
   }
   const ids = [...new Set(stockItems.map((it) => Number(it.product_id)))]
   if (ids.some((x) => !Number.isInteger(x) || x <= 0)) return c.json({ error: '维修配件不合法' }, 422)
@@ -266,9 +270,9 @@ app.put('/repairs/:id', async (c) => {
         return db
           .prepare(
             `INSERT INTO repair_items (repair_id, product_id, name, qty, unit_price, unit_cost)
-             VALUES (?1, 0, ?2, ?3, ?4, 0)`
+             VALUES (?1, 0, ?2, ?3, ?4, ?5)`
           )
-          .bind(id, (it.name ?? '').trim(), Number(it.qty), Number(it.unit_price))
+          .bind(id, (it.name ?? '').trim(), Number(it.qty), Number(it.unit_price), Math.max(0, Number(it.unit_cost) || 0))
       }
       const p = map.get(Number(it.product_id))!
       return db

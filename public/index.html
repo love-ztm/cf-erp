@@ -521,7 +521,7 @@
             </div>
             <div class="table-wrap">
               <table class="items-edit">
-                <thead><tr><th style="min-width:200px">更换配件（可选）</th><th>数量</th><th>单价</th><th class="num">小计</th><th></th></tr></thead>
+                <thead><tr><th style="min-width:200px">更换配件（可选）</th><th>数量</th><th>单价</th><th>成本</th><th class="num">小计</th><th></th></tr></thead>
                 <tbody>
                   <tr v-for="(it, i) in repairForm.items" :key="i">
                     <td style="min-width:230px">
@@ -531,8 +531,12 @@
                       </div>
                       <product-picker v-else v-model="it.product_id" :products="purchasableProducts" mode="sale" @update:model-value="onRepairProductChange(it, $event)" />
                     </td>
-                    <td><input type="number" min="0" step="any" v-model.number="it.qty" style="width:95px" /></td>
-                    <td><input type="number" min="0" step="0.01" v-model.number="it.price" style="width:115px" /></td>
+                    <td><input type="number" min="0" step="any" v-model.number="it.qty" style="width:85px" /></td>
+                    <td><input type="number" min="0" step="0.01" v-model.number="it.price" style="width:105px" /></td>
+                    <td>
+                      <input v-if="it.manual" type="number" min="0" step="0.01" v-model.number="it.cost" style="width:105px" placeholder="无则0" />
+                      <span v-else class="text-muted" style="font-size:12px">{{ money((productMap[it.product_id] || {}).avg_cost || 0) }}</span>
+                    </td>
                     <td class="num">{{ money(it.qty * it.price) }}</td>
                     <td><button type="button" class="btn-sm" @click="repairRemoveItem(i)">删</button></td>
                   </tr>

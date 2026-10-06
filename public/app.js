@@ -710,7 +710,7 @@ const app = createApp({
             items: (full.items || []).length
               ? full.items.map((it) => it.product_id
                   ? { product_id: it.product_id, qty: it.qty, price: it.unit_price }
-                  : { manual: true, name: it.product_name || it.name || '', qty: it.qty, price: it.unit_price })
+                  : { manual: true, name: it.product_name || it.name || '', qty: it.qty, price: it.unit_price, cost: it.unit_cost || 0 })
               : [{ product_id: '', qty: '', price: '' }],
           }
         }).catch((e) => this.toast(e.message, 'err'))
@@ -722,7 +722,7 @@ const app = createApp({
       if (this.repairForm) this.repairForm.items.push({ product_id: '', qty: '', price: '' })
     },
     repairAddManualItem() {
-      if (this.repairForm) this.repairForm.items.push({ manual: true, name: '', qty: '', price: '' })
+      if (this.repairForm) this.repairForm.items.push({ manual: true, name: '', qty: '', price: '', cost: '' })
     },
     repairRemoveItem(i) {
       if (this.repairForm && this.repairForm.items.length > 1) this.repairForm.items.splice(i, 1)
@@ -751,10 +751,11 @@ const app = createApp({
       if (Number(form.paid || 0) > 0 && !form.account_id) return this.toast('本次收款需要选择结算账户', 'err')
       const validManual = form.items.filter((it) => it.manual && (it.name || '').trim() && Number(it.qty) > 0)
       if (validManual.some((it) => Number(it.price) < 0)) return this.toast('配件单价不能为负数', 'err')
+      if (validManual.some((it) => Number(it.cost) < 0)) return this.toast('配件成本不能为负数', 'err')
       const items = form.items
         .filter((it) => it.product_id && Number(it.qty) > 0)
         .map((it) => ({ product_id: Number(it.product_id), qty: Number(it.qty), unit_price: Number(it.price) || 0 }))
-        .concat(validManual.map((it) => ({ product_id: 0, name: it.name.trim(), qty: Number(it.qty), unit_price: Number(it.price) || 0 })))
+        .concat(validManual.map((it) => ({ product_id: 0, name: it.name.trim(), qty: Number(it.qty), unit_price: Number(it.price) || 0, unit_cost: Number(it.cost) || 0 })))
       const body = {
         customer_id: form.customer_id || null,
         customer_name: this.repairCustomerName(form),
