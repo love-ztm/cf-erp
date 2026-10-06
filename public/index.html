@@ -53,7 +53,8 @@
         </div>
         <nav class="nav">
           <a v-for="n in nav" :key="n.key" v-show="navVisible(n)" :class="{ active: view === n.key }" @click="go(n.key)">
-            {{ n.icon }}　{{ n.label }}
+            <span class="icon">{{ n.icon }}</span>
+            <span>{{ n.label }}</span>
             <span v-if="n.key === 'settings' && currentUser?.role === 'admin'" class="badge blue" style="margin-left:6px;font-size:10px">管理</span>
           </a>
         </nav>
