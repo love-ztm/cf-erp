@@ -11,6 +11,7 @@ import reports from './reports'
 import backup from './backup'
 import webdav, { executeWebDAVBackup } from './webdav'
 import users from './users'
+import repairs from './repairs'
 
 const app = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>()
 
@@ -60,6 +61,7 @@ app.post('/api/admin/recompute', requireAdmin, async (c) => {
 app.route('/api', products)
 app.route('/api', purchases)
 app.route('/api', sales)
+app.route('/api', repairs)
 app.route('/api', parties)
 app.route('/api', accounts)
 app.route('/api', reports)

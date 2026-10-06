@@ -403,6 +403,8 @@ tbody tr:hover td {
 .badge.green::before { background: #16a34a; }
 .badge.blue { background: #dbeafe; color: #1d4ed8; }
 .badge.blue::before { background: #2563eb; }
+.badge.orange { background: #ffedd5; color: #c2410c; }
+.badge.orange::before { background: #ea580c; }
 .badge.red { background: #fee2e2; color: #b91c1c; }
 .badge.red::before { background: #dc2626; }
 .badge.gray { background: #f1f5f9; color: #64748b; }

@@ -43,12 +43,15 @@ const NAV = [
   { key: 'products', label: '商品管理', icon: '⊞' },
   { key: 'purchase', label: '采购入库', icon: '↓' },
   { key: 'sales', label: '销售出库', icon: '↑' },
+  { key: 'repairs', label: '维修单', icon: '🔧' },
   { key: 'stock', label: '库存查询', icon: '▤' },
   { key: 'funds', label: '资金', icon: '¥' },
   { key: 'reports', label: '报表', icon: '▦' },
   { key: 'parties', label: '往来单位', icon: '☰' },
-  { key: 'settings', label: '系统设置', icon: '⚙' },
+  { key: 'settings', label: '系统设置', icon: '⚙' }
 ]
+
+const REPAIR_STATUS_LABEL = { repairing: '维修中', done: '已完成', closed: '已取机' }
 
 const FUND_TYPE_LABEL = {
   receipt: '收款', payment: '付款', income: '其他收入', expense: '其他支出',
@@ -80,6 +83,10 @@ const app = createApp({
       accounts: [],
       purchases: [],
       sales: [],
+      // 维修单
+      repairs: [],
+      repairStatusFilter: '',
+      repairForm: null,
       adjustments: [],
       funds: [],
       moves: [],
@@ -604,6 +611,7 @@ const app = createApp({
         else if (v === 'products') this.products = await api('/products')
         else if (v === 'purchase') await this.loadOrders('purchase')
         else if (v === 'sales') await this.loadOrders('sales')
+        else if (v === 'repairs') await this.loadRepairs()
         else if (v === 'stock') {
           ;[this.products, this.adjustments] = await Promise.all([api('/products'), api('/adjustments')])
         } else if (v === 'funds') await this.loadFunds()
@@ -659,6 +667,163 @@ const app = createApp({
     },
     ordFilterChanged() {
       this.loadOrders(this.view === 'sales' ? 'sales' : 'purchase')
+    },
+    // ===== 维修单 =====
+    repairStatusLabel(s) { return REPAIR_STATUS_LABEL[s] || s },
+    async loadRepairs() {
+      const reqs = [api('/products'), api('/parties'), api('/accounts')]
+      let qs = ''
+      if (this.ordFrom && this.ordTo) {
+        const r = rangeISO(this.ordFrom, this.ordTo)
+        qs = `?from=${encodeURIComponent(r.from)}&to=${encodeURIComponent(r.to)}`
+      }
+      if (this.repairStatusFilter) qs += (qs ? '&' : '?') + 'status=' + this.repairStatusFilter
+      const [products, parties, accounts, list] = await Promise.all([...reqs, api('/repairs' + qs)])
+      this.products = products
+      this.parties = parties
+      this.accounts = accounts
+      this.repairs = list
+    },
+    setRepairStatusFilter(s) {
+      this.repairStatusFilter = s
+      this.loadRepairs()
+    },
+    blankRepair() {
+      return { id: null, customer_id: '', name_free: '', phone: '', device: '', fault: '', fee: '', discount: '', paid: '', account_id: '', note: '', items: [{ product_id: '', qty: '', price: '' }] }
+    },
+    openRepairModal(existing) {
+      if (existing) {
+        api('/repairs/' + existing.id).then((full) => {
+          this.repairForm = {
+            id: full.id,
+            customer_id: full.customer_id || '',
+            name_free: full.customer_id ? '' : (full.customer_name || ''),
+            phone: full.phone || '',
+            device: full.device || '',
+            fault: full.fault || '',
+            fee: full.fee || '',
+            discount: full.discount || '',
+            paid: full.paid || '',
+            account_id: full.account_id || '',
+            note: full.note || '',
+            items: (full.items || []).length ? full.items.map((it) => ({ product_id: it.product_id, qty: it.qty, price: it.unit_price })) : [{ product_id: '', qty: '', price: '' }],
+          }
+        }).catch((e) => this.toast(e.message, 'err'))
+      } else {
+        this.repairForm = this.blankRepair()
+      }
+    },
+    repairAddItem() {
+      if (this.repairForm) this.repairForm.items.push({ product_id: '', qty: '', price: '' })
+    },
+    repairRemoveItem(i) {
+      if (this.repairForm && this.repairForm.items.length > 1) this.repairForm.items.splice(i, 1)
+    },
+    onRepairProductChange(row, id) {
+      const p = this.productMap[id !== undefined ? id : row.product_id]
+      if (p) row.price = p.sale_price
+    },
+    repairPartsTotal(form) {
+      return form.items.reduce((s, it) => s + Number(it.qty || 0) * Number(it.price || 0), 0)
+    },
+    repairNet(form) {
+      return Number(form.fee || 0) + this.repairPartsTotal(form) - Number(form.discount || 0)
+    },
+    repairCustomerName(form) {
+      const c = this.customers.find((x) => x.id === Number(form.customer_id))
+      return c ? c.name : (form.name_free || '').trim()
+    },
+    async submitRepair() {
+      const form = this.repairForm
+      if (!form) return
+      if (!form.fee && !form.items.some((it) => it.product_id && Number(it.qty) > 0)) {
+        return this.toast('请填写维修费或至少一条配件明细', 'err')
+      }
+      if (Number(form.paid || 0) > 0 && !form.account_id) return this.toast('本次收款需要选择结算账户', 'err')
+      const items = form.items
+        .filter((it) => it.product_id && Number(it.qty) > 0)
+        .map((it) => ({ product_id: Number(it.product_id), qty: Number(it.qty), unit_price: Number(it.price) || 0 }))
+      const body = {
+        customer_id: form.customer_id || null,
+        customer_name: this.repairCustomerName(form),
+        phone: form.phone,
+        device: form.device,
+        fault: form.fault,
+        fee: Number(form.fee || 0),
+        discount: Number(form.discount || 0),
+        paid: Number(form.paid || 0),
+        account_id: form.account_id || null,
+        note: form.note,
+        items,
+      }
+      this.submitting = true
+      try {
+        if (form.id) {
+          await api('/repairs/' + form.id, { method: 'PUT', body })
+          this.toast('维修单已更新')
+        } else {
+          await api('/repairs', { method: 'POST', body })
+          this.toast('维修单已登记')
+        }
+        this.repairForm = null
+        await this.loadRepairs()
+      } catch (e) {
+        this.toast(e.message, 'err')
+      } finally {
+        this.submitting = false
+      }
+    },
+    async setRepairStatus(r, status) {
+      const label = REPAIR_STATUS_LABEL[status] || status
+      if (!confirm(`确定将维修单 #${r.id}（${r.customer_name || '散客'}）标记为「${label}」吗？`)) return
+      try {
+        await api(`/repairs/${r.id}/status`, { method: 'POST', body: { status } })
+        this.toast(`已标记为「${label}」`)
+        await this.loadRepairs()
+      } catch (e) {
+        this.toast(e.message, 'err')
+      }
+    },
+    async delRepair(id) {
+      if (!confirm(`确定删除维修单 #${id} 吗？已扣减的配件库存将自动回补。`)) return
+      try {
+        await api('/repairs/' + id, { method: 'DELETE' })
+        this.toast('维修单已删除')
+        await this.loadRepairs()
+      } catch (e) {
+        this.toast(e.message, 'err')
+      }
+    },
+    async printRepair(r) {
+      try {
+        const d = await api('/repairs/' + r.id)
+        const rows = (d.items || []).map((it) => [it.product_name || ('#' + it.product_id), it.qty, this.money(it.unit_price), this.money(it.qty * it.unit_price)])
+        this.printDoc = {
+          title: '维修单',
+          no: 'No.' + String(d.id).padStart(5, '0'),
+          meta: [
+            ['日期', this.dt(d.created_at)],
+            ['客户', d.customer_name || '散客'],
+            ['电话', d.phone || '—'],
+            ['设备型号', d.device || '—'],
+            ['故障描述', d.fault || '—'],
+            ['状态', this.repairStatusLabel(d.status)],
+          ],
+          table: rows.length ? { head: ['配件项目', '数量', '单价', '小计'], rows } : null,
+          totals: [
+            ['维修费', this.money(d.fee)],
+            ['配件费', this.money(d.parts_total)],
+            ['优惠', d.discount ? '-' + this.money(d.discount) : '—'],
+            ['应收合计', this.money(d.fee + d.parts_total - d.discount)],
+            ['已收', this.money(d.paid)],
+            ['欠款', this.money(d.fee + d.parts_total - d.discount - d.paid)],
+          ],
+          sign: '客户签字',
+          footer: this.company.print_footer_note || '',
+        }
+      } catch (e) {
+        this.toast(e.message, 'err')
+      }
     },
     async loadFunds() {
       const [accounts, funds, parties] = await Promise.all([api('/accounts'), api('/funds'), api('/parties')])

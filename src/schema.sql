@@ -134,6 +134,35 @@ CREATE TABLE IF NOT EXISTS sale_items (
 CREATE INDEX IF NOT EXISTS idx_sitems_sale    ON sale_items(sale_id);
 CREATE INDEX IF NOT EXISTS idx_sitems_product ON sale_items(product_id);
 
+-- 维修单：repairing 维修中 / done 已完成 / closed 已取机
+CREATE TABLE IF NOT EXISTS repairs (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  status        TEXT NOT NULL DEFAULT 'repairing',
+  customer_id   INTEGER,
+  customer_name TEXT NOT NULL DEFAULT '',
+  phone         TEXT DEFAULT '',
+  device        TEXT DEFAULT '',                 -- 设备/型号
+  fault         TEXT DEFAULT '',                 -- 故障描述
+  fee           REAL NOT NULL DEFAULT 0,         -- 维修费（人工）
+  parts_total   REAL NOT NULL DEFAULT 0,         -- 配件费合计（由明细计算冗余存储）
+  discount      REAL NOT NULL DEFAULT 0,         -- 整单优惠
+  paid          REAL NOT NULL DEFAULT 0,         -- 已收款
+  account_id    INTEGER,
+  note          TEXT DEFAULT '',
+  created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE TABLE IF NOT EXISTS repair_items (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  repair_id  INTEGER NOT NULL,
+  product_id INTEGER NOT NULL,
+  qty        REAL NOT NULL,
+  unit_price REAL NOT NULL,
+  unit_cost  REAL NOT NULL   -- 领用时的加权平均成本快照
+);
+CREATE INDEX IF NOT EXISTS idx_ritems_repair  ON repair_items(repair_id);
+CREATE INDEX IF NOT EXISTS idx_ritems_product ON repair_items(product_id);
+
 CREATE TABLE IF NOT EXISTS adjustments (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   product_id INTEGER NOT NULL,

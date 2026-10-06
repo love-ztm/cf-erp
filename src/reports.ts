@@ -10,11 +10,11 @@ function range(c: { req: { query: (k: string) => string | undefined } }): { from
   return { from, to }
 }
 
-// 毛利报表：按商品汇总（含退货反冲）+ 按日趋势 + 整单优惠
+// 毛利报表：按商品汇总（含退货反冲）+ 按日趋势 + 整单优惠 + 维修单汇总
 app.get('/reports/profit', async (c) => {
   const db = c.env.DB
   const { from, to } = range(c)
-  const [byProduct, daily, discountAgg] = await Promise.all([
+  const [byProduct, daily, discountAgg, repairAgg] = await Promise.all([
     db
       .prepare(
         `SELECT si.product_id, p.name, p.unit,
@@ -49,6 +49,16 @@ app.get('/reports/profit', async (c) => {
       )
       .bind(from, to)
       .first<{ net_discount: number }>(),
+    db
+      .prepare(
+        `SELECT COUNT(*) AS n,
+                COALESCE(SUM(r.fee + r.parts_total), 0) AS revenue,
+                COALESCE(SUM(r.discount), 0) AS discount,
+                COALESCE(SUM((SELECT COALESCE(SUM(ri.qty * ri.unit_cost), 0) FROM repair_items ri WHERE ri.repair_id = r.id)), 0) AS cost
+         FROM repairs r WHERE r.created_at >= ?1 AND r.created_at < ?2`
+      )
+      .bind(from, to)
+      .first<{ n: number; revenue: number; discount: number; cost: number }>(),
   ])
   const rows = (byProduct.results ?? []).map((r) => ({
     ...r,
@@ -58,6 +68,8 @@ app.get('/reports/profit', async (c) => {
   }))
   const gross = rows.reduce((acc, r) => ({ revenue: acc.revenue + r.revenue, cost: acc.cost + r.cost }), { revenue: 0, cost: 0 })
   const netDiscount = round2(discountAgg?.net_discount ?? 0)
+  const repNet = round2((repairAgg?.revenue ?? 0) - (repairAgg?.discount ?? 0))
+  const repCost = round2(repairAgg?.cost ?? 0)
   return c.json({
     from,
     to,
@@ -69,10 +81,16 @@ app.get('/reports/profit', async (c) => {
       cost: round2(gross.cost),
       profit: round2(gross.revenue - gross.cost - netDiscount),
     },
+    repair: {
+      n: repairAgg?.n ?? 0,
+      revenue: repNet,
+      cost: repCost,
+      profit: round2(repNet - repCost),
+    },
   })
 })
 
-// 进销存汇总：期初 / 采购入库 / 采购退货 / 销售出库 / 销售退货 / 盘盈 / 盘亏 / 期末
+// 进销存汇总：期初 / 采购入库 / 采购退货 / 销售出库 / 销售退货 / 维修领用 / 盘盈 / 盘亏 / 期末
 app.get('/reports/summary', async (c) => {
   const db = c.env.DB
   const { from, to } = range(c)
@@ -86,7 +104,7 @@ app.get('/reports/summary', async (c) => {
     }>(),
     loadLedger(db),
   ])
-  const blank = () => ({ opening: 0, purchase_in: 0, purchase_return: 0, sale_out: 0, sale_return: 0, adjust_in: 0, adjust_out: 0, closing: 0 })
+  const blank = () => ({ opening: 0, purchase_in: 0, purchase_return: 0, sale_out: 0, sale_return: 0, repair_out: 0, adjust_in: 0, adjust_out: 0, closing: 0 })
   const map = new Map<number, ReturnType<typeof blank> & { avg_cost: number; unit: string }>()
   for (const p of products.results ?? []) {
     map.set(p.id, { ...blank(), opening: p.initial_stock, closing: p.initial_stock, avg_cost: p.avg_cost, unit: p.unit })
@@ -96,6 +114,7 @@ app.get('/reports/summary', async (c) => {
     'purchase:return': -1,
     'sale:normal': -1,
     'sale:return': 1,
+    'repair:normal': -1,
     'adjust:': 1,
   }
   for (const m of ledger) {
@@ -109,12 +128,14 @@ app.get('/reports/summary', async (c) => {
     } else if (m.type === 'sale') {
       if (m.kind === 'normal') { if (!before) s.sale_out += m.qty }
       else { if (!before) s.sale_return += m.qty }
+    } else if (m.type === 'repair') {
+      if (!before) s.repair_out += m.qty
     } else {
       if (before) s.opening += sign * m.qty
       else if (m.qty >= 0) s.adjust_in += m.qty
       else s.adjust_out += -m.qty
     }
-    s.closing = s.opening + s.purchase_in - s.purchase_return - s.sale_out + s.sale_return + s.adjust_in - s.adjust_out
+    s.closing = s.opening + s.purchase_in - s.purchase_return - s.sale_out + s.sale_return - s.repair_out + s.adjust_in - s.adjust_out
   }
   const rows = [...map.entries()].map(([product_id, s]) => ({ product_id, ...s }))
   return c.json({ from, to, rows })

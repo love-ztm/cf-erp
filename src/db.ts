@@ -88,19 +88,20 @@ export function round2(n: number): number {
 
 export type LedgerRow = {
   product_id: number
-  type: 'purchase' | 'sale' | 'adjust'
+  type: 'purchase' | 'sale' | 'repair' | 'adjust'
   kind: 'normal' | 'return' | ''
   qty: number
   unit_cost: number | null
   created_at: string
 }
 
-// 库存流水方向：采购+ 采购退货- 销售- 销售退货+ 盘点±
+// 库存流水方向：采购+ 采购退货- 销售- 销售退货+ 维修领用- 盘点±
 export const MOVE_SIGN: Record<string, number> = {
   'purchase:normal': 1,
   'purchase:return': -1,
   'sale:normal': -1,
   'sale:return': 1,
+  'repair:normal': -1,
   'adjust:': 1,
 }
 
@@ -120,6 +121,12 @@ export async function loadLedger(db: D1Database, before?: string) {
            FROM sale_items si
            JOIN sales s ON s.id = si.sale_id
            JOIN products p ON p.id = si.product_id
+          WHERE p.no_stock = 0
+         UNION ALL
+         SELECT ri.product_id, 'repair', 'normal', ri.qty, ri.unit_cost, r.created_at
+           FROM repair_items ri
+           JOIN repairs r ON r.id = ri.repair_id
+           JOIN products p ON p.id = ri.product_id
           WHERE p.no_stock = 0
          UNION ALL
          SELECT product_id, 'adjust', '', qty, NULL, created_at FROM adjustments
@@ -167,7 +174,7 @@ async function recomputeStock(db: D1Database, ledger: LedgerRow[]) {
 
 // 重算往来欠款与账户余额（期初值 + 单据 + 收付款流水）
 export async function recomputeMoney(db: D1Database) {
-  const [parties, accounts, sales, purchases, funds] = await Promise.all([
+  const [parties, accounts, sales, purchases, funds, repairs] = await Promise.all([
     db.prepare('SELECT id, type, opening_debt FROM parties').all<{ id: number; type: string; opening_debt: number }>(),
     db.prepare('SELECT id, opening_balance FROM accounts').all<{ id: number; opening_balance: number }>(),
     db.prepare('SELECT customer_id, kind, total, discount, paid, account_id, refund_way FROM sales').all<{
@@ -193,6 +200,14 @@ export async function recomputeMoney(db: D1Database) {
       party_id: number | null
       account_id: number
       amount: number
+    }>(),
+    db.prepare('SELECT customer_id, fee, parts_total, discount, paid, account_id FROM repairs').all<{
+      customer_id: number | null
+      fee: number
+      parts_total: number
+      discount: number
+      paid: number
+      account_id: number | null
     }>(),
   ])
 
@@ -228,6 +243,12 @@ export async function recomputeMoney(db: D1Database) {
     if ((f.type === 'receipt' || f.type === 'payment') && f.party_id) {
       debt.set(f.party_id, (debt.get(f.party_id) ?? 0) - f.amount)
     }
+  }
+  // 维修单：应收 = 维修费 + 配件费 - 优惠；已收进账户，未收挂客户欠款
+  for (const r of repairs.results ?? []) {
+    const net = (r.fee ?? 0) + (r.parts_total ?? 0) - (r.discount ?? 0)
+    if (r.customer_id) debt.set(r.customer_id, (debt.get(r.customer_id) ?? 0) + net - (r.paid ?? 0))
+    if (r.account_id && r.paid) balance.set(r.account_id, (balance.get(r.account_id) ?? 0) + r.paid)
   }
 
   const stmts: D1PreparedStatement[] = []

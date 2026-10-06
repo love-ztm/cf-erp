@@ -428,6 +428,137 @@
           </div>
         </template>
 
+        <!-- ===== 维修单 ===== -->
+        <template v-else-if="view === 'repairs'">
+          <div class="page-title">维修单</div>
+          <div class="card" v-if="!repairForm">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px">
+              <h3 style="margin:0">维修记录</h3>
+              <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+                <input type="date" v-model="ordFrom" style="width:145px" @change="loadRepairs" />
+                <span class="text-muted">至</span>
+                <input type="date" v-model="ordTo" style="width:145px" @change="loadRepairs" />
+                <button type="button" class="btn-sm" :class="{ 'btn-primary': !repairStatusFilter }" @click="setRepairStatusFilter('')">全部状态</button>
+                <button type="button" class="btn-sm" :class="{ 'btn-primary': repairStatusFilter === 'repairing' }" @click="setRepairStatusFilter('repairing')">维修中</button>
+                <button type="button" class="btn-sm" :class="{ 'btn-primary': repairStatusFilter === 'done' }" @click="setRepairStatusFilter('done')">已完成</button>
+                <button type="button" class="btn-sm" :class="{ 'btn-primary': repairStatusFilter === 'closed' }" @click="setRepairStatusFilter('closed')">已取机</button>
+                <button type="button" class="btn-primary" @click="openRepairModal(null)">＋ 登记维修</button>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>时间</th><th>客户</th><th>设备/故障</th><th class="num">维修费</th><th class="num">配件费</th><th class="num">应收</th><th class="num">已收</th><th class="num">欠款</th><th>状态</th><th>操作</th></tr></thead>
+                <tbody>
+                  <tr v-for="r in repairs" :key="r.id">
+                    <td>{{ dt(r.created_at) }}</td>
+                    <td>{{ r.customer_name || '散客' }}<div v-if="r.phone" class="text-muted" style="font-size:11px">{{ r.phone }}</div></td>
+                    <td style="max-width:220px"><div>{{ r.device || '—' }}</div><div class="text-muted" style="font-size:11px; max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ r.fault || '' }}</div></td>
+                    <td class="num">{{ money(r.fee) }}</td>
+                    <td class="num">{{ money(r.parts_total) }}</td>
+                    <td class="num"><strong>{{ money(r.fee + r.parts_total - r.discount) }}</strong></td>
+                    <td class="num">{{ money(r.paid) }}</td>
+                    <td class="num" :class="r.fee + r.parts_total - r.discount - r.paid > 0 ? 'text-danger' : ''">{{ money(r.fee + r.parts_total - r.discount - r.paid) }}</td>
+                    <td>
+                      <span class="badge" :class="r.status === 'repairing' ? 'orange' : r.status === 'done' ? 'blue' : 'green'">{{ repairStatusLabel(r.status) }}</span>
+                    </td>
+                    <td style="white-space:nowrap">
+                      <button class="btn-sm" @click="printRepair(r)">查看/打印</button>
+                      <button v-if="r.status !== 'closed'" class="btn-sm" @click="openRepairModal(r)">修改</button>
+                      <button v-if="r.status === 'repairing'" class="btn-sm" @click="setRepairStatus(r, 'done')">完成</button>
+                      <button v-if="r.status === 'done'" class="btn-sm" @click="setRepairStatus(r, 'closed')">取机</button>
+                      <button class="btn-sm btn-danger" @click="delRepair(r.id)">删除</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <div v-if="!repairs.length" class="empty">暂无维修记录</div>
+            </div>
+          </div>
+
+          <!-- 新建/修改维修单 -->
+          <div class="card" v-else>
+            <h3>{{ repairForm.id ? '修改维修单 #' + repairForm.id : '登记维修' }}</h3>
+            <div class="form-grid" style="margin-bottom:12px">
+              <div>
+                <label>客户</label>
+                <select v-model="repairForm.customer_id">
+                  <option value="">— 手动输入 —</option>
+                  <option v-for="cst in customers" :key="cst.id" :value="cst.id">{{ cst.name }}{{ debtLabel(cst) ? '（' + debtLabel(cst) + '）' : '' }}</option>
+                </select>
+              </div>
+              <div v-if="!repairForm.customer_id">
+                <label>客户名称（手动）</label>
+                <input v-model="repairForm.name_free" placeholder="如：店面散客" />
+              </div>
+              <div>
+                <label>联系电话</label>
+                <input v-model="repairForm.phone" placeholder="可留空" />
+              </div>
+              <div>
+                <label>设备 / 型号</label>
+                <input v-model="repairForm.device" placeholder="如：联想小新 Pro 16" />
+              </div>
+              <div>
+                <label>故障描述</label>
+                <input v-model="repairForm.fault" placeholder="如：开机无显示" />
+              </div>
+              <div>
+                <label>维修费（人工）</label>
+                <input type="number" min="0" step="0.01" v-model.number="repairForm.fee" style="width:130px" />
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table class="items-edit">
+                <thead><tr><th style="min-width:200px">更换配件（可选）</th><th>数量</th><th>单价</th><th class="num">小计</th><th></th></tr></thead>
+                <tbody>
+                  <tr v-for="(it, i) in repairForm.items" :key="i">
+                    <td style="min-width:230px">
+                      <product-picker v-model="it.product_id" :products="purchasableProducts" mode="sale" @update:model-value="onRepairProductChange(it, $event)" />
+                    </td>
+                    <td><input type="number" min="0" step="any" v-model.number="it.qty" style="width:95px" /></td>
+                    <td><input type="number" min="0" step="0.01" v-model.number="it.price" style="width:115px" /></td>
+                    <td class="num">{{ money(it.qty * it.price) }}</td>
+                    <td><button type="button" class="btn-sm" @click="repairRemoveItem(i)">删</button></td>
+                  </tr>
+                </tbody>
+              </table>
+              <button type="button" class="btn-sm" style="margin-top:8px" @click="repairAddItem">＋ 添加配件</button>
+            </div>
+            <div class="form-grid" style="margin-top:14px">
+              <div>
+                <label>整单优惠</label>
+                <input type="number" min="0" step="0.01" v-model.number="repairForm.discount" style="width:130px" />
+              </div>
+              <div>
+                <label>本次收款</label>
+                <input type="number" min="0" step="0.01" v-model.number="repairForm.paid" style="width:130px" />
+              </div>
+              <div>
+                <label>收款账户（本次收款用）</label>
+                <select v-model="repairForm.account_id">
+                  <option value="">— 未设置 —</option>
+                  <option v-for="a in accounts" :key="a.id" :value="a.id">{{ a.name }}（{{ money(a.balance) }}）</option>
+                </select>
+              </div>
+              <div>
+                <label>备注</label>
+                <input v-model="repairForm.note" placeholder="可留空" />
+              </div>
+            </div>
+            <div style="margin-top:14px; display:flex; justify-content:space-between; align-items:center">
+              <div class="text-muted" style="font-size:13px">
+                配件费 <strong>{{ money(repairPartsTotal(repairForm)) }}</strong> ·
+                应收合计 <strong style="color:var(--primary)">{{ money(repairNet(repairForm)) }}</strong>
+                <span v-if="repairNet(repairForm) - Number(repairForm.paid || 0) > 0" class="text-danger">· 未收 {{ money(repairNet(repairForm) - Number(repairForm.paid || 0)) }}（选了客户则挂欠款）</span>
+              </div>
+              <div>
+                <button type="button" @click="repairForm = null" style="margin-right:8px">取消</button>
+                <button type="button" class="btn-primary" :disabled="submitting" @click="submitRepair">{{ submitting ? '保存中...' : (repairForm.id ? '保存修改' : '登记维修单') }}</button>
+              </div>
+            </div>
+          </div>
+        </template>
+
         <!-- ===== 库存查询 ===== -->
         <template v-else-if="view === 'stock'">
           <div class="page-title">库存查询</div>
@@ -594,6 +725,13 @@
                   <div class="stat"><div class="label">毛利（净）</div><div class="value green">{{ money(profit.total.profit) }}</div></div>
                   <div class="stat"><div class="label">毛利率</div><div class="value">{{ profit.total.revenue ? ((profit.total.profit / profit.total.revenue) * 100).toFixed(1) + '%' : '—' }}</div></div>
                 </div>
+                <div class="grid-cards" style="margin-top:10px">
+                  <div class="stat"><div class="label">维修收入</div><div class="value blue">{{ money(profit.repair?.revenue || 0) }}</div></div>
+                  <div class="stat"><div class="label">维修成本（配件）</div><div class="value">{{ money(profit.repair?.cost || 0) }}</div></div>
+                  <div class="stat"><div class="label">维修优惠</div><div class="value text-danger">{{ money(profit.repair?.profit != null ? (profit.repair.revenue + profit.repair.cost - profit.repair.profit) : 0) }}</div></div>
+                  <div class="stat"><div class="label">维修毛利</div><div class="value green">{{ money(profit.repair?.profit || 0) }}</div></div>
+                  <div class="stat"><div class="label">维修单数</div><div class="value">{{ profit.repair?.n || 0 }} 单</div></div>
+                </div>
                 <div class="table-wrap">
                   <table>
                     <thead><tr><th>商品</th><th class="num">净销量</th><th class="num">销售额</th><th class="num">成本</th><th class="num">毛利</th><th class="num">毛利率</th></tr></thead>
@@ -659,7 +797,7 @@
             <div class="sec-body" v-show="sec.summary">
               <div class="table-wrap" v-if="summary">
                 <table>
-                  <thead><tr><th>商品</th><th class="num">期初</th><th class="num">采购入库</th><th class="num">采购退货</th><th class="num">销售出库</th><th class="num">销售退货</th><th class="num">盘盈</th><th class="num">盘亏</th><th class="num">期末</th><th>单位</th></tr></thead>
+                  <thead><tr><th>商品</th><th class="num">期初</th><th class="num">采购入库</th><th class="num">采购退货</th><th class="num">销售出库</th><th class="num">销售退货</th><th class="num">维修领用</th><th class="num">盘盈</th><th class="num">盘亏</th><th class="num">期末</th><th>单位</th></tr></thead>
                   <tbody>
                     <tr v-for="r in summary.rows" :key="r.product_id">
                       <td>{{ r.name || (productMap[r.product_id] || {}).name || r.product_id }}</td>
@@ -668,6 +806,7 @@
                       <td class="num text-danger">{{ qfmt(r.purchase_return) }}</td>
                       <td class="num text-danger">{{ qfmt(r.sale_out) }}</td>
                       <td class="num text-green">{{ qfmt(r.sale_return) }}</td>
+                      <td class="num text-danger">{{ qfmt(r.repair_out) }}</td>
                       <td class="num">{{ qfmt(r.adjust_in) }}</td>
                       <td class="num">{{ qfmt(r.adjust_out) }}</td>
                       <td class="num"><strong>{{ qfmt(r.closing) }}</strong></td>
@@ -1270,6 +1409,9 @@
             </label>
             <label style="display:flex;align-items:center;gap:4px;font-weight:400;cursor:pointer">
               <input type="checkbox" :checked="userModal.permissions.includes('sales')" @change="togglePerm('sales')" /> 销售/采购单
+            </label>
+            <label style="display:flex;align-items:center;gap:4px;font-weight:400;cursor:pointer">
+              <input type="checkbox" :checked="userModal.permissions.includes('repairs')" @change="togglePerm('repairs')" /> 维修单
             </label>
             <label style="display:flex;align-items:center;gap:4px;font-weight:400;cursor:pointer">
               <input type="checkbox" :checked="userModal.permissions.includes('stock')" @change="togglePerm('stock')" /> 库存调整
