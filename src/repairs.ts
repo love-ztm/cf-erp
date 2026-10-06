@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { recomputeAll, round2 } from './db'
+import { recomputeAll, round2, docDateToISO } from './db'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -56,6 +56,7 @@ app.post('/repairs', async (c) => {
     paid?: number
     account_id?: number | null
     note?: string
+    doc_date?: string
     items?: ItemInput[]
   }>()
   const items = (b.items ?? []).filter((it) => Number(it.qty) > 0)
@@ -92,25 +93,48 @@ app.post('/repairs', async (c) => {
     if (!acc) return c.json({ error: '结算账户不存在' }, 422)
   }
 
+  const createdAt = docDateToISO(b.doc_date)
+  const repairInsert = createdAt
+    ? db
+        .prepare(
+          `INSERT INTO repairs (status, customer_id, customer_name, phone, device, fault, fee, parts_total, discount, paid, account_id, note, created_at)
+           VALUES ('repairing', ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)`
+        )
+        .bind(
+          b.customer_id ?? null,
+          (b.customer_name ?? '').trim(),
+          (b.phone ?? '').trim(),
+          (b.device ?? '').trim(),
+          (b.fault ?? '').trim(),
+          fee,
+          partsTotal,
+          discount,
+          paid,
+          b.account_id ?? null,
+          (b.note ?? '').trim(),
+          createdAt
+        )
+    : db
+        .prepare(
+          `INSERT INTO repairs (status, customer_id, customer_name, phone, device, fault, fee, parts_total, discount, paid, account_id, note)
+           VALUES ('repairing', ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)`
+        )
+        .bind(
+          b.customer_id ?? null,
+          (b.customer_name ?? '').trim(),
+          (b.phone ?? '').trim(),
+          (b.device ?? '').trim(),
+          (b.fault ?? '').trim(),
+          fee,
+          partsTotal,
+          discount,
+          paid,
+          b.account_id ?? null,
+          (b.note ?? '').trim()
+        )
+
   const stmts: D1PreparedStatement[] = [
-    db
-      .prepare(
-        `INSERT INTO repairs (status, customer_id, customer_name, phone, device, fault, fee, parts_total, discount, paid, account_id, note)
-         VALUES ('repairing', ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)`
-      )
-      .bind(
-        b.customer_id ?? null,
-        (b.customer_name ?? '').trim(),
-        (b.phone ?? '').trim(),
-        (b.device ?? '').trim(),
-        (b.fault ?? '').trim(),
-        fee,
-        partsTotal,
-        discount,
-        paid,
-        b.account_id ?? null,
-        (b.note ?? '').trim()
-      ),
+    repairInsert,
     ...items.map((it) => {
       const p = map.get(Number(it.product_id))!
       return db
@@ -157,6 +181,7 @@ app.put('/repairs/:id', async (c) => {
     paid?: number
     account_id?: number | null
     note?: string
+    doc_date?: string
     items?: ItemInput[]
   }>()
   const items = (b.items ?? []).filter((it) => Number(it.qty) > 0)
@@ -186,26 +211,30 @@ app.put('/repairs/:id', async (c) => {
   const paid = Math.min(Math.max(0, Number(b.paid) || 0), round2(net - discount))
   if (paid > 0 && !b.account_id) return c.json({ error: '已收款需选择结算账户' }, 422)
 
+  const newDate = docDateToISO(b.doc_date)
+  const headVals = [
+    b.customer_id ?? null,
+    (b.customer_name ?? '').trim(),
+    (b.phone ?? '').trim(),
+    (b.device ?? '').trim(),
+    (b.fault ?? '').trim(),
+    fee,
+    partsTotal,
+    discount,
+    paid,
+    b.account_id ?? null,
+    (b.note ?? '').trim(),
+    id,
+  ]
+  const repairUpdate = db
+    .prepare(
+      `UPDATE repairs SET customer_id = ?1, customer_name = ?2, phone = ?3, device = ?4, fault = ?5,
+       fee = ?6, parts_total = ?7, discount = ?8, paid = ?9, account_id = ?10, note = ?11${newDate ? ', created_at = ?13' : ''} WHERE id = ?12`
+    )
+    .bind(...(newDate ? [...headVals, newDate] : headVals))
+
   const stmts: D1PreparedStatement[] = [
-    db
-      .prepare(
-        `UPDATE repairs SET customer_id = ?1, customer_name = ?2, phone = ?3, device = ?4, fault = ?5,
-         fee = ?6, parts_total = ?7, discount = ?8, paid = ?9, account_id = ?10, note = ?11 WHERE id = ?12`
-      )
-      .bind(
-        b.customer_id ?? null,
-        (b.customer_name ?? '').trim(),
-        (b.phone ?? '').trim(),
-        (b.device ?? '').trim(),
-        (b.fault ?? '').trim(),
-        fee,
-        partsTotal,
-        discount,
-        paid,
-        b.account_id ?? null,
-        (b.note ?? '').trim(),
-        id
-      ),
+    repairUpdate,
     db.prepare('DELETE FROM repair_items WHERE repair_id = ?1').bind(id),
     ...items.map((it) => {
       const p = map.get(Number(it.product_id))!

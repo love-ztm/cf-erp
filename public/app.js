@@ -159,7 +159,7 @@ const app = createApp({
       summary: null,
       fundsRep: null,
       fundsDetail: null,     // 单笔收支详情/编辑弹窗
-      fundsForm: { type: 'income', party_id: '', account_id: '', amount: '', note: '' },
+      fundsForm: { type: 'income', party_id: '', account_id: '', amount: '', note: '', date: '' },
       fundsDayFilter: null,  // 按日汇总点击日期 → 筛选当天明细
       sec: { profit: true, summary: false, debt: false, funds: false },
       repLoading: false,
@@ -237,7 +237,7 @@ const app = createApp({
       return this.hasPerm(item.key)
     },
     blankOrder() {
-      return { supplier_id: '', customer_id: '', name_free: '', note: '', discount: '', paid: '', account_id: '', items: [{ product_id: '', qty: '', price: '' }] }
+      return { supplier_id: '', customer_id: '', name_free: '', note: '', discount: '', paid: '', account_id: '', date: '', items: [{ product_id: '', qty: '', price: '' }] }
     },
     money(n) { return '¥' + (Math.round((Number(n) || 0) * 100) / 100).toFixed(2) },
     qfmt(n) {
@@ -689,7 +689,7 @@ const app = createApp({
       this.loadRepairs()
     },
     blankRepair() {
-      return { id: null, customer_id: '', name_free: '', phone: '', device: '', fault: '', fee: '', discount: '', paid: '', account_id: '', note: '', items: [{ product_id: '', qty: '', price: '' }] }
+      return { id: null, customer_id: '', name_free: '', phone: '', device: '', fault: '', fee: '', discount: '', paid: '', account_id: '', note: '', date: '', items: [{ product_id: '', qty: '', price: '' }] }
     },
     openRepairModal(existing) {
       if (existing) {
@@ -706,6 +706,7 @@ const app = createApp({
             paid: full.paid || '',
             account_id: full.account_id || '',
             note: full.note || '',
+            date: dstr(new Date(full.created_at)),
             items: (full.items || []).length ? full.items.map((it) => ({ product_id: it.product_id, qty: it.qty, price: it.unit_price })) : [{ product_id: '', qty: '', price: '' }],
           }
         }).catch((e) => this.toast(e.message, 'err'))
@@ -754,6 +755,7 @@ const app = createApp({
         paid: Number(form.paid || 0),
         account_id: form.account_id || null,
         note: form.note,
+        doc_date: form.date || '',
         items,
       }
       this.submitting = true
@@ -866,6 +868,7 @@ const app = createApp({
           account_id: x.account_id || '',
           amount: Number(x.amount),
           note: x.note || '',
+          date: dstr(new Date(x.created_at)),
         }
       }
     },
@@ -880,7 +883,7 @@ const app = createApp({
       try {
         await api('/funds/' + this.fundsDetail.id, {
           method: 'PUT',
-          body: { type: f.type, party_id: f.party_id || null, account_id: Number(f.account_id), amount: Number(f.amount), note: f.note },
+          body: { type: f.type, party_id: f.party_id || null, account_id: Number(f.account_id), amount: Number(f.amount), note: f.note, doc_date: f.date || '' },
         })
         this.fundsDetail = null
         this.toast('已修改')
@@ -1028,9 +1031,10 @@ const app = createApp({
         .map((it) => ({ product_id: Number(it.product_id), qty: Number(it.qty), unit_cost: Number(it.price) || 0, unit_price: Number(it.price) || 0 }))
       if (!items.length) return this.toast('请至少填写一条明细（选商品、填数量）', 'err')
       if (Number(form.paid || 0) > 0 && !form.account_id) return this.toast('本次收/付款需要选择结算账户', 'err')
+      const base = { note: form.note, discount: Number(form.discount || 0), paid: Number(form.paid || 0), account_id: form.account_id || null, doc_date: form.date || '' }
       const body = kind === 'purchase'
-        ? { supplier_id: form.supplier_id || null, supplier_name: this.partyName(form), note: form.note, discount: Number(form.discount || 0), paid: Number(form.paid || 0), account_id: form.account_id || null, items }
-        : { customer_id: form.customer_id || null, customer_name: this.partyName(form), note: form.note, discount: Number(form.discount || 0), paid: Number(form.paid || 0), account_id: form.account_id || null, items }
+        ? { ...base, supplier_id: form.supplier_id || null, supplier_name: this.partyName(form), items }
+        : { ...base, customer_id: form.customer_id || null, customer_name: this.partyName(form), items }
       this.submitting = true
       try {
         await api('/' + (kind === 'purchase' ? 'purchases' : 'sales'), { method: 'POST', body })
@@ -1125,6 +1129,7 @@ const app = createApp({
           discount: Number(full.discount) || 0,
           paid: Number(full.paid) || 0,
           account_id: full.account_id || '',
+          date: dstr(new Date(full.created_at)),
           items: (full.items || []).map(it => ({
             product_id: it.product_id,
             qty: Number(it.qty),
@@ -1153,9 +1158,10 @@ const app = createApp({
       const name = party ? party.name : (m.name_free || '').trim()
       this.submitting = true
       try {
+        const base = { note: m.note, discount: Number(m.discount || 0), paid: Number(m.paid || 0), account_id: m.account_id || null, doc_date: m.date || '' }
         const body = m.kind === 'sales'
-          ? { customer_id: m.party_id || null, customer_name: name, note: m.note, discount: Number(m.discount || 0), paid: Number(m.paid || 0), account_id: m.account_id || null, items }
-          : { supplier_id: m.party_id || null, supplier_name: name, note: m.note, discount: Number(m.discount || 0), paid: Number(m.paid || 0), account_id: m.account_id || null, items }
+          ? { ...base, customer_id: m.party_id || null, customer_name: name, items }
+          : { ...base, supplier_id: m.party_id || null, supplier_name: name, items }
         await api('/' + m.kind + '/' + m.id, { method: 'PUT', body })
         this.toast('单据已修改，库存与欠款已重算')
         this.orderEdit = null
@@ -1276,7 +1282,7 @@ const app = createApp({
 
     // ===== 资金 =====
     openFundModal(type) {
-      this.fundModal = { type, party_id: '', account_id: '', amount: '', note: '' }
+      this.fundModal = { type, party_id: '', account_id: '', amount: '', note: '', date: '' }
     },
     fundPartyLabel(type) {
       if (type === 'receipt') return '客户 *'
@@ -1294,7 +1300,9 @@ const app = createApp({
       if (!m.account_id) return this.toast('请选择结算账户', 'err')
       if ((m.type === 'receipt' || m.type === 'payment') && !m.party_id) return this.toast('请选择往来单位', 'err')
       try {
-        await api('/funds', { method: 'POST', body: { ...m, amount: Number(m.amount) } })
+        const body = { ...m, amount: Number(m.amount) }
+        if (!m.date) delete body.date
+        await api('/funds', { method: 'POST', body })
         this.fundModal = null
         await this.loadFunds()
         this.toast('已入账')

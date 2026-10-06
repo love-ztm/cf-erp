@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { recomputeAll, round2 } from './db'
+import { recomputeAll, round2, docDateToISO } from './db'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -20,6 +20,7 @@ app.put('/purchases/:id', async (c) => {
     discount?: number
     paid?: number
     account_id?: number | null
+    doc_date?: string
     items?: ItemInput[]
   }>()
   const items = (b.items ?? []).filter((it) => Number(it.qty) > 0)
@@ -52,21 +53,16 @@ app.put('/purchases/:id', async (c) => {
     paid = Math.min(Math.max(0, Number(b.paid)), net)
   }
 
+  const newDate = docDateToISO(b.doc_date)
+  const headVals = [b.supplier_id ?? null, (b.supplier_name ?? '').trim(), total, discount, paid, b.account_id ?? null, (b.note ?? '').trim(), id]
+  const purchaseUpdate = db
+    .prepare(
+      `UPDATE purchases SET supplier_id = ?1, supplier_name = ?2, total = ?3, discount = ?4, paid = ?5, account_id = ?6, note = ?7${newDate ? ', created_at = ?9' : ''} WHERE id = ?8`
+    )
+    .bind(...(newDate ? [...headVals, newDate] : headVals))
+
   const stmts: D1PreparedStatement[] = [
-    db
-      .prepare(
-        `UPDATE purchases SET supplier_id = ?1, supplier_name = ?2, total = ?3, discount = ?4, paid = ?5, account_id = ?6, note = ?7 WHERE id = ?8`
-      )
-      .bind(
-        b.supplier_id ?? null,
-        (b.supplier_name ?? '').trim(),
-        total,
-        discount,
-        paid,
-        b.account_id ?? null,
-        (b.note ?? '').trim(),
-        id
-      ),
+    purchaseUpdate,
     db.prepare('DELETE FROM purchase_items WHERE purchase_id = ?1').bind(id),
     ...items.map((it) =>
       db
@@ -140,6 +136,7 @@ app.post('/purchases', async (c) => {
     paid?: number
     account_id?: number | null
     refund_way?: string
+    doc_date?: string
     items?: ItemInput[]
   }>()
   const kind = b.kind === 'return' ? 'return' : 'normal'
@@ -186,23 +183,23 @@ app.post('/purchases', async (c) => {
     }
   }
 
+  const createdAt = docDateToISO(b.doc_date)
+  const purchaseInsert = createdAt
+    ? db
+        .prepare(
+          `INSERT INTO purchases (kind, supplier_id, supplier_name, total, discount, paid, account_id, refund_way, note, created_at)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`
+        )
+        .bind(kind, b.supplier_id ?? null, (b.supplier_name ?? '').trim(), total, discount, paid, b.account_id ?? null, refundWay, (b.note ?? '').trim(), createdAt)
+    : db
+        .prepare(
+          `INSERT INTO purchases (kind, supplier_id, supplier_name, total, discount, paid, account_id, refund_way, note)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`
+        )
+        .bind(kind, b.supplier_id ?? null, (b.supplier_name ?? '').trim(), total, discount, paid, b.account_id ?? null, refundWay, (b.note ?? '').trim())
+
   const stmts: D1PreparedStatement[] = [
-    db
-      .prepare(
-        `INSERT INTO purchases (kind, supplier_id, supplier_name, total, discount, paid, account_id, refund_way, note)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`
-      )
-      .bind(
-        kind,
-        b.supplier_id ?? null,
-        (b.supplier_name ?? '').trim(),
-        total,
-        discount,
-        paid,
-        b.account_id ?? null,
-        refundWay,
-        (b.note ?? '').trim()
-      ),
+    purchaseInsert,
     ...items.map((it) =>
       db
         .prepare(

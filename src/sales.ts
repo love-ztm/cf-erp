@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { recomputeAll, round2 } from './db'
+import { recomputeAll, round2, docDateToISO } from './db'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -20,6 +20,7 @@ app.put('/sales/:id', async (c) => {
     discount?: number
     paid?: number
     account_id?: number | null
+    doc_date?: string
     items?: ItemInput[]
   }>()
   const items = (b.items ?? []).filter((it) => Number(it.qty) > 0)
@@ -69,21 +70,16 @@ app.put('/sales/:id', async (c) => {
     paid = Math.min(Math.max(0, Number(b.paid)), net)
   }
 
+  const newDate = docDateToISO(b.doc_date)
+  const headVals = [b.customer_id ?? null, (b.customer_name ?? '').trim(), total, discount, paid, b.account_id ?? null, (b.note ?? '').trim(), id]
+  const salesUpdate = db
+    .prepare(
+      `UPDATE sales SET customer_id = ?1, customer_name = ?2, total = ?3, discount = ?4, paid = ?5, account_id = ?6, note = ?7${newDate ? ', created_at = ?9' : ''} WHERE id = ?8`
+    )
+    .bind(...(newDate ? [...headVals, newDate] : headVals))
+
   const stmts: D1PreparedStatement[] = [
-    db
-      .prepare(
-        `UPDATE sales SET customer_id = ?1, customer_name = ?2, total = ?3, discount = ?4, paid = ?5, account_id = ?6, note = ?7 WHERE id = ?8`
-      )
-      .bind(
-        b.customer_id ?? null,
-        (b.customer_name ?? '').trim(),
-        total,
-        discount,
-        paid,
-        b.account_id ?? null,
-        (b.note ?? '').trim(),
-        id
-      ),
+    salesUpdate,
     db.prepare('DELETE FROM sale_items WHERE sale_id = ?1').bind(id),
     ...items.map((it) =>
       db
@@ -159,6 +155,7 @@ app.post('/sales', async (c) => {
     paid?: number
     account_id?: number | null
     refund_way?: string
+    doc_date?: string
     items?: ItemInput[]
   }>()
   const kind = b.kind === 'return' ? 'return' : 'normal'
@@ -205,23 +202,23 @@ app.post('/sales', async (c) => {
   }
 
   // 单据内的资金变动直接增量更新（删除单据时走全量重算）
+  const createdAt = docDateToISO(b.doc_date)
+  const saleInsert = createdAt
+    ? db
+        .prepare(
+          `INSERT INTO sales (kind, customer_id, customer_name, total, discount, paid, account_id, refund_way, note, created_at)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`
+        )
+        .bind(kind, b.customer_id ?? null, (b.customer_name ?? '').trim(), total, discount, paid, b.account_id ?? null, refundWay, (b.note ?? '').trim(), createdAt)
+    : db
+        .prepare(
+          `INSERT INTO sales (kind, customer_id, customer_name, total, discount, paid, account_id, refund_way, note)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`
+        )
+        .bind(kind, b.customer_id ?? null, (b.customer_name ?? '').trim(), total, discount, paid, b.account_id ?? null, refundWay, (b.note ?? '').trim())
+
   const stmts: D1PreparedStatement[] = [
-    db
-      .prepare(
-        `INSERT INTO sales (kind, customer_id, customer_name, total, discount, paid, account_id, refund_way, note)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`
-      )
-      .bind(
-        kind,
-        b.customer_id ?? null,
-        (b.customer_name ?? '').trim(),
-        total,
-        discount,
-        paid,
-        b.account_id ?? null,
-        refundWay,
-        (b.note ?? '').trim()
-      ),
+    saleInsert,
     ...items.map((it) => {
       const p = map.get(Number(it.product_id))!
       return db

@@ -255,6 +255,10 @@
                 </select>
               </div>
               <div>
+                <label>单据日期（可选，默认现在）</label>
+                <input type="date" v-model="purchaseForm.date" />
+              </div>
+              <div>
                 <label>备注</label>
                 <input v-model="purchaseForm.note" placeholder="单号、运费等，可留空" />
               </div>
@@ -351,6 +355,10 @@
                   <option value="">— 未设置 —</option>
                   <option v-for="a in accounts" :key="a.id" :value="a.id">{{ a.name }}（{{ money(a.balance) }}）</option>
                 </select>
+              </div>
+              <div>
+                <label>单据日期（可选，默认现在）</label>
+                <input type="date" v-model="saleForm.date" />
               </div>
               <div>
                 <label>备注</label>
@@ -501,6 +509,10 @@
               <div>
                 <label>故障描述</label>
                 <input v-model="repairForm.fault" placeholder="如：开机无显示" />
+              </div>
+              <div>
+                <label>维修日期（可选，默认现在）</label>
+                <input type="date" v-model="repairForm.date" />
               </div>
               <div>
                 <label>维修费（人工）</label>
@@ -1318,6 +1330,10 @@
           <input type="number" min="0" step="0.01" v-model.number="fundModal.amount" />
         </div>
         <div class="form-row">
+          <label>入账日期（可选，默认现在）</label>
+          <input type="date" v-model="fundModal.date" />
+        </div>
+        <div class="form-row">
           <label>备注</label>
           <input v-model="fundModal.note" placeholder="如：电脑维修" />
         </div>
@@ -1469,6 +1485,10 @@
             <input type="number" min="0" step="0.01" v-model.number="fundsForm.amount" />
           </div>
           <div class="form-row">
+            <label>入账日期（可选）</label>
+            <input type="date" v-model="fundsForm.date" />
+          </div>
+          <div class="form-row">
             <label>备注</label>
             <input v-model="fundsForm.note" />
           </div>
@@ -1518,6 +1538,10 @@
               <option value="">— 未设置 —</option>
               <option v-for="a in accounts" :key="a.id" :value="a.id">{{ a.name }}（{{ money(a.balance) }}）</option>
             </select>
+          </div>
+          <div>
+            <label>单据日期（可选）</label>
+            <input type="date" v-model="orderEdit.date" />
           </div>
           <div>
             <label>备注</label>

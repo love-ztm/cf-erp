@@ -86,6 +86,14 @@ export function round2(n: number): number {
   return Math.round(n * 100) / 100
 }
 
+// 单据日期（本地 YYYY-MM-DD）→ 存库 ISO（UTC）。取当地中午 12 点，确保落在所选日期内；非法输入返回 null（用当前时间）
+export function docDateToISO(d?: string): string | null {
+  const s = (d ?? '').trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null
+  const dt = new Date(s + 'T12:00:00')
+  return isNaN(dt.getTime()) ? null : dt.toISOString()
+}
+
 export type LedgerRow = {
   product_id: number
   type: 'purchase' | 'sale' | 'repair' | 'adjust'

@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { recomputeMoney, round2 } from './db'
+import { recomputeMoney, round2, docDateToISO } from './db'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -90,6 +90,7 @@ app.post('/funds', async (c) => {
     account_id?: number
     amount?: number
     note?: string
+    doc_date?: string
   }>()
   const type = b.type ?? ''
   if (!FUND_TYPES.includes(type as never)) return c.json({ error: '资金类型不合法' }, 422)
@@ -123,10 +124,17 @@ app.post('/funds', async (c) => {
     partyName = party.name
   }
 
+  const createdAt = docDateToISO(b.doc_date)
+  const fundInsert = createdAt
+    ? db
+        .prepare('INSERT INTO funds (type, party_id, party_name, account_id, amount, note, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)')
+        .bind(type, partyId, partyName, accountId, round2(amount), (b.note ?? '').trim(), createdAt)
+    : db
+        .prepare('INSERT INTO funds (type, party_id, party_name, account_id, amount, note) VALUES (?1, ?2, ?3, ?4, ?5, ?6)')
+        .bind(type, partyId, partyName, accountId, round2(amount), (b.note ?? '').trim())
+
   await db.batch([
-    db
-      .prepare('INSERT INTO funds (type, party_id, party_name, account_id, amount, note) VALUES (?1, ?2, ?3, ?4, ?5, ?6)')
-      .bind(type, partyId, partyName, accountId, round2(amount), (b.note ?? '').trim()),
+    fundInsert,
     db
       .prepare(
         `UPDATE accounts SET balance = balance + ?1 * (CASE WHEN ?2 IN ('receipt','income') THEN 1 ELSE -1 END) WHERE id = ?3`
@@ -149,6 +157,7 @@ app.put('/funds/:id', async (c) => {
     account_id?: number
     amount?: number
     note?: string
+    doc_date?: string
   }>()
   const row = await db.prepare('SELECT id, type FROM funds WHERE id = ?1').bind(id).first<{ id: number; type: string }>()
   if (!row) return c.json({ error: '流水不存在' }, 404)
@@ -184,10 +193,19 @@ app.put('/funds/:id', async (c) => {
     partyName = party.name
   }
 
-  await db
-    .prepare('UPDATE funds SET type = ?1, party_id = ?2, party_name = ?3, account_id = ?4, amount = ?5, note = ?6 WHERE id = ?7')
-    .bind(type, partyId, partyName, accountId, round2(amount), (b.note ?? '').trim(), id)
-    .run()
+  const newDate = docDateToISO(b.doc_date)
+  const headVals = [type, partyId, partyName, accountId, round2(amount), (b.note ?? '').trim(), id]
+  if (newDate) {
+    await db
+      .prepare('UPDATE funds SET type = ?1, party_id = ?2, party_name = ?3, account_id = ?4, amount = ?5, note = ?6, created_at = ?8 WHERE id = ?7')
+      .bind(...headVals, newDate)
+      .run()
+  } else {
+    await db
+      .prepare('UPDATE funds SET type = ?1, party_id = ?2, party_name = ?3, account_id = ?4, amount = ?5, note = ?6 WHERE id = ?7')
+      .bind(...headVals)
+      .run()
+  }
   await recomputeMoney(db)
   return c.json({ ok: true })
 })
