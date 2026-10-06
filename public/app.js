@@ -689,7 +689,7 @@ const app = createApp({
       this.loadRepairs()
     },
     blankRepair() {
-      return { id: null, customer_id: '', name_free: '', phone: '', device: '', fault: '', fee: '', discount: '', paid: '', account_id: '', note: '', date: '', items: [{ product_id: '', qty: '', price: '' }] }
+      return { id: null, customer_id: '', name_free: '', phone: '', device: '', fault: '', solution: '', fee: '', discount: '', paid: '', account_id: '', note: '', date: '', items: [{ product_id: '', qty: '', price: '' }] }
     },
     openRepairModal(existing) {
       if (existing) {
@@ -701,6 +701,7 @@ const app = createApp({
             phone: full.phone || '',
             device: full.device || '',
             fault: full.fault || '',
+            solution: full.solution || '',
             fee: full.fee || '',
             discount: full.discount || '',
             paid: full.paid || '',
@@ -762,6 +763,7 @@ const app = createApp({
         phone: form.phone,
         device: form.device,
         fault: form.fault,
+        solution: form.solution,
         fee: Number(form.fee || 0),
         discount: Number(form.discount || 0),
         paid: Number(form.paid || 0),
@@ -821,6 +823,7 @@ const app = createApp({
             ['电话', d.phone || '—'],
             ['设备型号', d.device || '—'],
             ['故障描述', d.fault || '—'],
+            ['维修说明', d.solution || '—'],
             ['状态', this.repairStatusLabel(d.status)],
           ],
           table: rows.length ? { head: ['配件项目', '数量', '单价', '小计'], rows } : null,

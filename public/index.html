@@ -510,6 +510,10 @@
                 <label>故障描述</label>
                 <input v-model="repairForm.fault" placeholder="如：开机无显示" />
               </div>
+              <div style="grid-column: 1 / -1">
+                <label>诊断维修说明（打印单上显示，如：更换内存条 / 重装系统 / 清灰除尘）</label>
+                <textarea v-model="repairForm.solution" rows="2" placeholder="记录本次处理内容：更换了什么、装了什么系统、调试修改了什么"></textarea>
+              </div>
               <div>
                 <label>维修日期（可选，默认现在）</label>
                 <input type="date" v-model="repairForm.date" />

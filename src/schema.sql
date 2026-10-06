@@ -143,6 +143,7 @@ CREATE TABLE IF NOT EXISTS repairs (
   phone         TEXT DEFAULT '',
   device        TEXT DEFAULT '',                 -- 设备/型号
   fault         TEXT DEFAULT '',                 -- 故障描述
+  solution      TEXT DEFAULT '',                 -- 诊断维修说明（更换/装系统/调试内容，打印可见）
   fee           REAL NOT NULL DEFAULT 0,         -- 维修费（人工）
   parts_total   REAL NOT NULL DEFAULT 0,         -- 配件费合计（由明细计算冗余存储）
   discount      REAL NOT NULL DEFAULT 0,         -- 整单优惠

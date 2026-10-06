@@ -51,6 +51,7 @@ app.post('/repairs', async (c) => {
     phone?: string
     device?: string
     fault?: string
+    solution?: string
     fee?: number
     discount?: number
     paid?: number
@@ -108,8 +109,8 @@ app.post('/repairs', async (c) => {
   const repairInsert = createdAt
     ? db
         .prepare(
-          `INSERT INTO repairs (status, customer_id, customer_name, phone, device, fault, fee, parts_total, discount, paid, account_id, note, created_at)
-           VALUES ('repairing', ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)`
+          `INSERT INTO repairs (status, customer_id, customer_name, phone, device, fault, solution, fee, parts_total, discount, paid, account_id, note, created_at)
+           VALUES ('repairing', ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)`
         )
         .bind(
           b.customer_id ?? null,
@@ -117,6 +118,7 @@ app.post('/repairs', async (c) => {
           (b.phone ?? '').trim(),
           (b.device ?? '').trim(),
           (b.fault ?? '').trim(),
+          (b.solution ?? '').trim(),
           fee,
           partsTotal,
           discount,
@@ -127,8 +129,8 @@ app.post('/repairs', async (c) => {
         )
     : db
         .prepare(
-          `INSERT INTO repairs (status, customer_id, customer_name, phone, device, fault, fee, parts_total, discount, paid, account_id, note)
-           VALUES ('repairing', ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)`
+          `INSERT INTO repairs (status, customer_id, customer_name, phone, device, fault, solution, fee, parts_total, discount, paid, account_id, note)
+           VALUES ('repairing', ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)`
         )
         .bind(
           b.customer_id ?? null,
@@ -136,6 +138,7 @@ app.post('/repairs', async (c) => {
           (b.phone ?? '').trim(),
           (b.device ?? '').trim(),
           (b.fault ?? '').trim(),
+          (b.solution ?? '').trim(),
           fee,
           partsTotal,
           discount,
@@ -195,6 +198,7 @@ app.put('/repairs/:id', async (c) => {
     phone?: string
     device?: string
     fault?: string
+    solution?: string
     fee?: number
     discount?: number
     paid?: number
@@ -241,6 +245,7 @@ app.put('/repairs/:id', async (c) => {
   if (paid > 0 && !b.account_id) return c.json({ error: '已收款需选择结算账户' }, 422)
 
   const newDate = docDateToISO(b.doc_date)
+  const solution = (b.solution ?? '').trim()
   const headVals = [
     b.customer_id ?? null,
     (b.customer_name ?? '').trim(),
@@ -258,9 +263,9 @@ app.put('/repairs/:id', async (c) => {
   const repairUpdate = db
     .prepare(
       `UPDATE repairs SET customer_id = ?1, customer_name = ?2, phone = ?3, device = ?4, fault = ?5,
-       fee = ?6, parts_total = ?7, discount = ?8, paid = ?9, account_id = ?10, note = ?11${newDate ? ', created_at = ?13' : ''} WHERE id = ?12`
+       fee = ?6, parts_total = ?7, discount = ?8, paid = ?9, account_id = ?10, note = ?11, solution = ?13${newDate ? ', created_at = ?14' : ''} WHERE id = ?12`
     )
-    .bind(...(newDate ? [...headVals, newDate] : headVals))
+    .bind(...(newDate ? [...headVals, solution, newDate] : [...headVals, solution]))
 
   const stmts: D1PreparedStatement[] = [
     repairUpdate,
