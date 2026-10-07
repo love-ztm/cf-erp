@@ -104,6 +104,7 @@ const app = createApp({
       fundTypeFilter: '',
 
       // 商品
+      cleaningDup: false,
       prodSearch: '',
       prodCategory: '',
       showArchived: false,
@@ -979,6 +980,32 @@ const app = createApp({
     },
 
     // ===== 商品 =====
+    async cleanupDuplicates() {
+      this.cleaningDup = true
+      try {
+        const res = await api('/products/cleanup-duplicates', { method: 'POST', body: { dry: true } })
+        if (!res.total) return this.toast('没有发现重复且库存为 0 的商品')
+        const names = (arr) => (arr || []).map((x) => x.name).join('、')
+        const ok = confirm(
+          `共发现 ${res.total} 个重复且库存为 0 的商品：
+` +
+          `· 无历史流水，将直接删除 ${res.deleted.length} 个：${names(res.deleted) || '无'}
+` +
+          `· 有历史流水，将停用归档 ${res.archived.length} 个：${names(res.archived) || '无'}
+
+` +
+          `删除的无法恢复，归档的可在「显示已停用」中找回。确定执行吗？`
+        )
+        if (!ok) return this.toast('已取消')
+        await api('/products/cleanup-duplicates', { method: 'POST' })
+        this.products = await api('/products')
+        this.toast(`清理完成：删除 ${res.deleted.length} 个，停用 ${res.archived.length} 个`)
+      } catch (e) {
+        this.toast(e.message, 'err')
+      } finally {
+        this.cleaningDup = false
+      }
+    },
     openProdModal(p) {
       this.prodModal = p
         ? { id: p.id, name: p.name, sku: p.sku, barcode: p.barcode, category: p.category, unit: p.unit, sale_price: p.sale_price, low_stock: p.low_stock, archived: !!p.archived, no_stock: !!p.no_stock, avg_cost: p.avg_cost, cost_manual: !!p.cost_manual, _origAvg: Number(p.avg_cost), _origManual: !!p.cost_manual }

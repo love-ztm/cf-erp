@@ -134,15 +134,55 @@ app.delete('/products/:id', async (c) => {
       `SELECT
         EXISTS(SELECT 1 FROM purchase_items pi WHERE pi.product_id = ?1) AS hp,
         EXISTS(SELECT 1 FROM sale_items si WHERE si.product_id = ?1) AS hs,
+        EXISTS(SELECT 1 FROM repair_items ri WHERE ri.product_id = ?1) AS hr,
         EXISTS(SELECT 1 FROM adjustments a WHERE a.product_id = ?1) AS ha`
     )
     .bind(id)
-    .first<{ hp: number; hs: number; ha: number }>()
-  if (row && (row.hp || row.hs || row.ha)) {
+    .first<{ hp: number; hs: number; hr: number; ha: number }>()
+  if (row && (row.hp || row.hs || row.hr || row.ha)) {
     return c.json({ error: '该商品已有进出流水，不能删除；可在编辑中停用' }, 422)
   }
   await db.prepare('DELETE FROM products WHERE id = ?1').bind(id).run()
   return c.json({ ok: true })
+})
+
+// 清理重复且库存为 0 的商品：
+// - 同名商品（未停用）中，除第一个（最小 id）外，其余库存为 0 的视为多余
+// - 无任何进出流水的 → 直接删除；有流水引用的 → 停用归档（保留历史，不再出现在选择列表）
+app.post('/products/cleanup-duplicates', async (c) => {
+  const db = c.env.DB
+  const b = await c.req.json<{ dry?: boolean }>().catch(() => null)
+  const dry = !!(b?.dry)
+  const cands = await db
+    .prepare(
+      `SELECT p.id, p.name,
+              EXISTS(SELECT 1 FROM purchase_items pi WHERE pi.product_id = p.id) AS hp,
+              EXISTS(SELECT 1 FROM sale_items si WHERE si.product_id = p.id) AS hs,
+              EXISTS(SELECT 1 FROM repair_items ri WHERE ri.product_id = p.id) AS hr,
+              EXISTS(SELECT 1 FROM adjustments a WHERE a.product_id = p.id) AS ha
+       FROM products p
+       WHERE p.archived = 0 AND p.stock = 0
+         AND EXISTS (SELECT 1 FROM products q WHERE q.name = p.name AND q.archived = 0 AND q.id < p.id)
+       ORDER BY p.id`
+    )
+    .all<{ id: number; name: string; hp: number; hs: number; hr: number; ha: number }>()
+
+  const list = cands.results ?? []
+  const deleted: Array<{ id: number; name: string }> = []
+  const archived: Array<{ id: number; name: string }> = []
+  const stmts: D1PreparedStatement[] = []
+  for (const p of list) {
+    const used = !!(p.hp || p.hs || p.hr || p.ha)
+    if (used) {
+      archived.push({ id: p.id, name: p.name })
+      stmts.push(db.prepare('UPDATE products SET archived = 1 WHERE id = ?1').bind(p.id))
+    } else {
+      deleted.push({ id: p.id, name: p.name })
+      stmts.push(db.prepare('DELETE FROM products WHERE id = ?1').bind(p.id))
+    }
+  }
+  if (!dry && stmts.length) await db.batch(stmts)
+  return c.json({ ok: true, deleted, archived, total: list.length, dry })
 })
 
 // ===== 库存调整（盘盈 / 盘亏）=====

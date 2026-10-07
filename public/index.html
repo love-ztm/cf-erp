@@ -202,6 +202,7 @@
                 <input type="checkbox" v-model="showArchived" style="width:auto" /> 显示已停用
               </label>
               <div style="flex:1"></div>
+              <button class="btn-sm btn-danger" :disabled="cleaningDup" @click="cleanupDuplicates">{{ cleaningDup ? '清理中...' : '清理重复零库存商品' }}</button>
               <button class="btn-primary" @click="openProdModal(null)">＋ 新增商品</button>
             </div>
             <div class="table-wrap">
