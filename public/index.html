@@ -453,53 +453,9 @@
 
         <!-- ===== 维修单 ===== -->
         <template v-else-if="view === 'repairs'">
-          <div class="page-title">维修单</div>
-          <div class="card" v-if="!repairForm">
-            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px">
-              <h3 style="margin:0">维修记录</h3>
-              <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
-                <input type="date" v-model="ordFrom" style="width:145px" @change="loadRepairs" />
-                <span class="text-muted">至</span>
-                <input type="date" v-model="ordTo" style="width:145px" @change="loadRepairs" />
-                <button type="button" class="btn-sm" :class="{ 'btn-primary': !repairStatusFilter }" @click="setRepairStatusFilter('')">全部状态</button>
-                <button type="button" class="btn-sm" :class="{ 'btn-primary': repairStatusFilter === 'repairing' }" @click="setRepairStatusFilter('repairing')">维修中</button>
-                <button type="button" class="btn-sm" :class="{ 'btn-primary': repairStatusFilter === 'done' }" @click="setRepairStatusFilter('done')">已完成</button>
-                <button type="button" class="btn-sm" :class="{ 'btn-primary': repairStatusFilter === 'closed' }" @click="setRepairStatusFilter('closed')">已取机</button>
-                <button type="button" class="btn-primary" @click="openRepairModal(null)">＋ 登记维修</button>
-              </div>
-            </div>
-            <div class="table-wrap">
-              <table>
-                <thead><tr><th>时间</th><th>客户</th><th>设备/故障</th><th class="num">维修费</th><th class="num">配件费</th><th class="num">应收</th><th class="num">已收</th><th class="num">欠款</th><th>状态</th><th>操作</th></tr></thead>
-                <tbody>
-                  <tr v-for="r in repairs" :key="r.id">
-                    <td>{{ dt(r.created_at) }}</td>
-                    <td>{{ r.customer_name || '散客' }}<div v-if="r.phone" class="text-muted" style="font-size:11px">{{ r.phone }}</div></td>
-                    <td style="max-width:220px"><div>{{ r.device || '—' }}</div><div class="text-muted" style="font-size:11px; max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ r.fault || '' }}</div></td>
-                    <td class="num">{{ money(r.fee) }}</td>
-                    <td class="num">{{ money(r.parts_total) }}</td>
-                    <td class="num"><strong>{{ money(r.fee + r.parts_total - r.discount) }}</strong></td>
-                    <td class="num">{{ money(r.paid) }}</td>
-                    <td class="num" :class="r.fee + r.parts_total - r.discount - r.paid > 0 ? 'text-danger' : ''">{{ money(r.fee + r.parts_total - r.discount - r.paid) }}</td>
-                    <td>
-                      <span class="badge" :class="r.status === 'repairing' ? 'orange' : r.status === 'done' ? 'blue' : 'green'">{{ repairStatusLabel(r.status) }}</span>
-                    </td>
-                    <td style="white-space:nowrap">
-                      <button class="btn-sm" @click="printRepair(r)">查看/打印</button>
-                      <button class="btn-sm" @click="openRepairModal(r)">修改</button>
-                      <button v-if="r.status === 'repairing'" class="btn-sm" @click="setRepairStatus(r, 'done')">完成</button>
-                      <button v-if="r.status === 'done'" class="btn-sm" @click="setRepairStatus(r, 'closed')">取机</button>
-                      <button class="btn-sm btn-danger" @click="delRepair(r.id)">删除</button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-              <div v-if="!repairs.length" class="empty">暂无维修记录</div>
-            </div>
-          </div>
-
-          <!-- 新建/修改维修单 -->
-          <div class="card" v-else>
+          <div class="page-title">维修管理</div>
+          
+          <div class="card" v-if="repairForm">
             <h3>{{ repairForm.id ? '修改维修单 #' + repairForm.id : '登记维修' }}</h3>
             <div class="form-grid" style="margin-bottom:12px">
               <div>
@@ -598,6 +554,51 @@
                 <button type="button" @click="repairForm = null" style="margin-right:8px">取消</button>
                 <button type="button" class="btn-primary" :disabled="submitting" @click="submitRepair">{{ submitting ? '保存中...' : (repairForm.id ? '保存修改' : '登记维修单') }}</button>
               </div>
+            </div>
+          </div>
+        
+
+<div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px">
+              <h3 style="margin:0">维修记录</h3>
+              <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+                <input type="date" v-model="ordFrom" style="width:145px" @change="loadRepairs" />
+                <span class="text-muted">至</span>
+                <input type="date" v-model="ordTo" style="width:145px" @change="loadRepairs" />
+                <button type="button" class="btn-sm" :class="{ 'btn-primary': !repairStatusFilter }" @click="setRepairStatusFilter('')">全部状态</button>
+                <button type="button" class="btn-sm" :class="{ 'btn-primary': repairStatusFilter === 'repairing' }" @click="setRepairStatusFilter('repairing')">维修中</button>
+                <button type="button" class="btn-sm" :class="{ 'btn-primary': repairStatusFilter === 'done' }" @click="setRepairStatusFilter('done')">已完成</button>
+                <button type="button" class="btn-sm" :class="{ 'btn-primary': repairStatusFilter === 'closed' }" @click="setRepairStatusFilter('closed')">已取机</button>
+                <button type="button" class="btn-primary" @click="openRepairModal(null)">＋ 登记维修</button>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>时间</th><th>客户</th><th>设备/故障</th><th class="num">维修费</th><th class="num">配件费</th><th class="num">应收</th><th class="num">已收</th><th class="num">欠款</th><th>状态</th><th>操作</th></tr></thead>
+                <tbody>
+                  <tr v-for="r in repairs" :key="r.id">
+                    <td>{{ dt(r.created_at) }}</td>
+                    <td>{{ r.customer_name || '散客' }}<div v-if="r.phone" class="text-muted" style="font-size:11px">{{ r.phone }}</div></td>
+                    <td style="max-width:220px"><div>{{ r.device || '—' }}</div><div class="text-muted" style="font-size:11px; max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ r.fault || '' }}</div></td>
+                    <td class="num">{{ money(r.fee) }}</td>
+                    <td class="num">{{ money(r.parts_total) }}</td>
+                    <td class="num"><strong>{{ money(r.fee + r.parts_total - r.discount) }}</strong></td>
+                    <td class="num">{{ money(r.paid) }}</td>
+                    <td class="num" :class="r.fee + r.parts_total - r.discount - r.paid > 0 ? 'text-danger' : ''">{{ money(r.fee + r.parts_total - r.discount - r.paid) }}</td>
+                    <td>
+                      <span class="badge" :class="r.status === 'repairing' ? 'orange' : r.status === 'done' ? 'blue' : 'green'">{{ repairStatusLabel(r.status) }}</span>
+                    </td>
+                    <td style="white-space:nowrap">
+                      <button class="btn-sm" @click="printRepair(r)">查看/打印</button>
+                      <button class="btn-sm" @click="openRepairModal(r)">修改</button>
+                      <button v-if="r.status === 'repairing'" class="btn-sm" @click="setRepairStatus(r, 'done')">完成</button>
+                      <button v-if="r.status === 'done'" class="btn-sm" @click="setRepairStatus(r, 'closed')">取机</button>
+                      <button class="btn-sm btn-danger" @click="delRepair(r.id)">删除</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <div v-if="!repairs.length" class="empty">暂无维修记录</div>
             </div>
           </div>
         </template>

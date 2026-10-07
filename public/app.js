@@ -734,6 +734,8 @@ const app = createApp({
       this.products = products
       this.parties = parties
       this.accounts = accounts
+      // 进入维修管理默认打开登记维修表单
+      if (!this.repairForm) this.repairForm = this.blankRepair()
       if (this.repairForm && !this.repairForm.account_id) this.repairForm.account_id = this.cashAccountId()
       this.repairs = list
     },
