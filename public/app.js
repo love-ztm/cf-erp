@@ -104,6 +104,7 @@ const app = createApp({
       fundTypeFilter: '',
 
       // 商品
+      stockFilter: '',   // 库存查询分类: ''全部 / 'in'有库存 / 'zero'零库存
       cleaningDup: false,
       prodSearch: '',
       prodCategory: '',
@@ -187,6 +188,14 @@ const app = createApp({
       const set = new Set()
       for (const p of this.products) if (p.category) set.add(p.category)
       return [...set]
+    },
+    stockFiltered() {
+      return this.products.filter((p) => {
+        if (p.archived) return false
+        if (this.stockFilter === 'in') return !p.no_stock && Number(p.stock) > 0
+        if (this.stockFilter === 'zero') return !p.no_stock && Number(p.stock) === 0
+        return true
+      })
     },
     nextSku() {
       let max = 0

@@ -612,13 +612,16 @@
           </div>
           <div class="card">
             <div class="toolbar" style="justify-content:flex-end">
+              <button type="button" class="btn-sm" :class="{ 'btn-primary': !stockFilter }" @click="stockFilter = ''">全部 {{ products.filter(p => !p.archived).length }}</button>
+              <button type="button" class="btn-sm" :class="{ 'btn-primary': stockFilter === 'in' }" @click="stockFilter = 'in'">有库存 {{ products.filter(p => !p.archived && !p.no_stock && Number(p.stock) > 0).length }}</button>
+              <button type="button" class="btn-sm" :class="{ 'btn-primary': stockFilter === 'zero' }" @click="stockFilter = 'zero'">零库存 {{ products.filter(p => !p.archived && !p.no_stock && Number(p.stock) === 0).length }}</button>
               <button class="btn-sm" @click="printStock">打印库存清单</button>
             </div>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>商品</th><th>编号</th><th class="num">库存</th><th>单位</th><th class="num">成本均价</th><th class="num">库存价值</th><th class="num">预警阈值</th><th>操作</th></tr></thead>
                 <tbody>
-                  <tr v-for="p in products.filter(p => !p.archived)" :key="p.id">
+                  <tr v-for="p in stockFiltered" :key="p.id">
                     <td>{{ p.name }} <span v-if="p.no_stock" class="badge blue">服务</span></td>
                     <td class="text-muted">{{ p.sku || '—' }}</td>
                     <td class="num">
@@ -636,7 +639,7 @@
                   </tr>
                 </tbody>
               </table>
-              <div v-if="!products.filter(p => !p.archived).length" class="empty">暂无商品</div>
+              <div v-if="!stockFiltered.length" class="empty">暂无商品</div>
             </div>
           </div>
           <div class="card">
