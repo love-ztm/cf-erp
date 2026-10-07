@@ -1331,20 +1331,23 @@ const app = createApp({
       }
     },
     printStock() {
-      const rows = this.products.filter(p => !p.archived).map(p => [
+      // 按当前分类筛选打印：全部 / 有库存 / 零库存
+      const list = this.stockFiltered
+      const scopeLabel = this.stockFilter === 'in' ? '有库存' : this.stockFilter === 'zero' ? '零库存' : '全部'
+      const rows = list.map(p => [
         p.name, p.sku || '—', p.category || '—', p.unit,
         p.no_stock ? '服务' : this.qfmt(p.stock),
         this.money(p.avg_cost),
         this.money(p.no_stock ? 0 : p.stock * p.avg_cost),
       ])
       this.printDoc = {
-        title: '库存清单',
+        title: '库存清单（' + scopeLabel + '）',
         no: '',
-        meta: [['打印时间', this.dt(new Date().toISOString())], ['商品数', String(this.products.filter(p => !p.archived).length)]],
+        meta: [['打印时间', this.dt(new Date().toISOString())], ['商品数', String(list.length)]],
         table: { head: ['商品', '编号', '类别', '单位', '库存', '成本均价', '库存价值'], rows },
         totals: [
-          ['库存总量', this.qfmt(this.products.filter(p => !p.archived && !p.no_stock).reduce((s, p) => s + Number(p.stock || 0), 0))],
-          ['库存总成本', this.money(this.stockValue)],
+          ['库存总量', this.qfmt(list.filter(p => !p.no_stock).reduce((s, p) => s + Number(p.stock || 0), 0))],
+          ['库存总成本', this.money(list.reduce((s, p) => s + (p.no_stock ? 0 : Number(p.stock || 0) * Number(p.avg_cost || 0)), 0))],
         ],
         sign: '盘点人签字',
       }
