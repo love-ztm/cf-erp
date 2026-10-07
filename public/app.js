@@ -423,6 +423,10 @@ const app = createApp({
           last_backup_at: wRes.last_backup_at || '',
           last_status: wRes.last_status || '',
           last_error: wRes.last_error || '',
+          sched_last_at: wRes.sched_last_at || '',
+          sched_last_source: wRes.sched_last_source || '',
+          sched_last_status: wRes.sched_last_status || '',
+          sched_last_error: wRes.sched_last_error || '',
         }
         if (cRes) {
           this.company = { ...this.company, ...cRes }

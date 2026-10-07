@@ -1022,6 +1022,14 @@
                     </span>
                     <span v-if="webdav.last_error" class="text-danger" style="margin-left:6px">{{ webdav.last_error }}</span>
                   </div>
+                  <div v-if="webdav.sched_last_at" style="margin-top:6px; border-top:1px dashed #e2e8f0; padding-top:6px">
+                    定时/自动备份：<strong>{{ dt(webdav.sched_last_at) }}</strong>
+                    （{{ webdav.sched_last_source === 'cron' ? '凌晨定时' : '访问自动补备份' }}）
+                    <span class="badge" :class="webdav.sched_last_status === 'success' ? 'green' : (webdav.sched_last_status === 'running' ? 'orange' : 'red')">
+                      {{ webdav.sched_last_status === 'success' ? '成功' : (webdav.sched_last_status === 'running' ? '进行中' : '失败') }}
+                    </span>
+                    <span v-if="webdav.sched_last_error" class="text-danger" style="margin-left:6px">{{ webdav.sched_last_error }}</span>
+                  </div>
                 </div>
 
                 <form @submit.prevent="saveWebDAVConfig">

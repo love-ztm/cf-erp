@@ -15,6 +15,11 @@ export type WebDAVConfig = {
   last_backup_at?: string
   last_status?: string // 'success' | 'failed'
   last_error?: string
+  // 定时/自动备份独立状态（手动成功不会覆盖，便于排查 cron 失败）
+  sched_last_at?: string
+  sched_last_source?: string // 'cron' | 'auto'
+  sched_last_status?: string // 'running' | 'success' | 'failed'
+  sched_last_error?: string
 }
 
 // 从 sys_config 获取 WebDAV 配置
@@ -35,6 +40,10 @@ export async function getWebDAVConfig(db: D1Database): Promise<WebDAVConfig> {
     last_backup_at: map.get('webdav_last_backup_at') || '',
     last_status: map.get('webdav_last_status') || '',
     last_error: map.get('webdav_last_error') || '',
+    sched_last_at: map.get('webdav_sched_last_at') || '',
+    sched_last_source: map.get('webdav_sched_last_source') || '',
+    sched_last_status: map.get('webdav_sched_last_status') || '',
+    sched_last_error: map.get('webdav_sched_last_error') || '',
   }
 }
 
@@ -104,16 +113,40 @@ export async function pruneOldBackups(
 }
 
 // 执行一次全量备份并上传至 WebDAV
-export async function executeWebDAVBackup(db: D1Database): Promise<{ ok: boolean; filename?: string; error?: string }> {
+// source: manual 手动 / cron 定时触发器 / auto 站点访问自动补备份
+// 手动以外的运行额外记录独立状态键（webdav_sched_last_*），避免手动成功覆盖定时失败原因
+export async function executeWebDAVBackup(
+  db: D1Database,
+  opts: { source?: 'manual' | 'cron' | 'auto' } = {}
+): Promise<{ ok: boolean; filename?: string; error?: string }> {
   const cfg = await getWebDAVConfig(db)
   if (!cfg.enabled || !cfg.url) {
     return { ok: false, error: 'WebDAV 备份未启用或未配置服务地址' }
   }
+  const source = opts.source ?? 'manual'
+  const startTs = Date.now()
 
   const now = new Date()
   const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '')
   const timeStr = now.toTimeString().slice(0, 8).replace(/:/g, '')
   const filename = `ERP备份_${dateStr}_${timeStr}.json`
+
+  // 记录定时/自动执行状态（与手动分开，便于排查）：先写入运行中标记
+  const schedKeys = source === 'manual'
+    ? []
+    : [
+        db.prepare("INSERT INTO sys_config (key, value) VALUES ('webdav_sched_last_at', ?1) ON CONFLICT(key) DO UPDATE SET value = ?1").bind(now.toISOString()),
+        db.prepare("INSERT INTO sys_config (key, value) VALUES ('webdav_sched_last_source', ?1) ON CONFLICT(key) DO UPDATE SET value = ?1").bind(source),
+        db.prepare("INSERT INTO sys_config (key, value) VALUES ('webdav_sched_last_status', 'running') ON CONFLICT(key) DO UPDATE SET value = 'running'"),
+        db.prepare("INSERT INTO sys_config (key, value) VALUES ('webdav_sched_last_error', '') ON CONFLICT(key) DO UPDATE SET value = ''"),
+      ]
+  if (schedKeys.length) {
+    try {
+      await db.batch(schedKeys)
+    } catch {
+      // 状态记录失败不影响备份本身
+    }
+  }
 
   try {
     // 1. 生成全库自包含 JSON 备份
@@ -134,16 +167,23 @@ export async function executeWebDAVBackup(db: D1Database): Promise<{ ok: boolean
     const cleanDir = cfg.remote_dir ? cfg.remote_dir.replace(/^\/+|\/+$/g, '') + '/' : ''
     const targetUrl = new URL(cleanDir + filename, baseUrl).toString()
 
-    // 4. PUT 上传文件
-    const res = await fetch(targetUrl, {
-      method: 'PUT',
-      headers: {
-        Authorization: auth,
-        'Content-Type': 'application/json; charset=utf-8',
-      },
-      body: jsonStr,
-    })
-
+    // 4. PUT 上传文件（对网络瞬断做一次重试）
+    const put = () =>
+      fetch(targetUrl, {
+        method: 'PUT',
+        headers: {
+          Authorization: auth,
+          'Content-Type': 'application/json; charset=utf-8',
+        },
+        body: jsonStr,
+      })
+    let res = await put()
+    if (!res.ok && res.status !== 201 && res.status !== 204) {
+      // 5xx/网络类错误重试一次
+      if (res.status >= 500) {
+        res = await put()
+      }
+    }
     if (!res.ok && res.status !== 201 && res.status !== 204) {
       const msg = `WebDAV 服务器返回 HTTP ${res.status}: ${res.statusText}`
       throw new Error(msg)
@@ -156,19 +196,29 @@ export async function executeWebDAVBackup(db: D1Database): Promise<{ ok: boolean
     }
 
     // 6. 记录成功状态
-    await db.batch([
+    const okStmts = [
       db.prepare("INSERT INTO sys_config (key, value) VALUES ('webdav_last_backup_at', ?1) ON CONFLICT(key) DO UPDATE SET value = ?1").bind(now.toISOString()),
       db.prepare("INSERT INTO sys_config (key, value) VALUES ('webdav_last_status', 'success') ON CONFLICT(key) DO UPDATE SET value = 'success'"),
       db.prepare("INSERT INTO sys_config (key, value) VALUES ('webdav_last_error', '') ON CONFLICT(key) DO UPDATE SET value = ''"),
-    ])
-
+    ]
+    if (schedKeys.length) {
+      okStmts.push(db.prepare("INSERT INTO sys_config (key, value) VALUES ('webdav_sched_last_status', 'success') ON CONFLICT(key) DO UPDATE SET value = 'success'"))
+    }
+    await db.batch(okStmts)
+    console.log(`[WebDAV] ${source} 备份成功 ${filename} 耗时 ${Date.now() - startTs}ms`)
     return { ok: true, filename }
   } catch (err: any) {
     const errMsg = err?.message || String(err)
-    await db.batch([
+    const errStmts = [
       db.prepare("INSERT INTO sys_config (key, value) VALUES ('webdav_last_status', 'failed') ON CONFLICT(key) DO UPDATE SET value = 'failed'"),
       db.prepare("INSERT INTO sys_config (key, value) VALUES ('webdav_last_error', ?1) ON CONFLICT(key) DO UPDATE SET value = ?1").bind(errMsg),
-    ])
+    ]
+    if (schedKeys.length) {
+      errStmts.push(db.prepare("INSERT INTO sys_config (key, value) VALUES ('webdav_sched_last_status', 'failed') ON CONFLICT(key) DO UPDATE SET value = 'failed'"))
+      errStmts.push(db.prepare("INSERT INTO sys_config (key, value) VALUES ('webdav_sched_last_error', ?1) ON CONFLICT(key) DO UPDATE SET value = ?1").bind(errMsg))
+    }
+    await db.batch(errStmts)
+    console.log(`[WebDAV] ${source} 备份失败 ${filename} 耗时 ${Date.now() - startTs}ms: ${errMsg}`)
     return { ok: false, error: errMsg }
   }
 }

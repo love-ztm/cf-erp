@@ -1,4 +1,4 @@
-import { Hono } from 'hono'
+import { Hono, type Context } from 'hono'
 import { ensureSchema } from './db'
 import { requireAuth, requireAdmin, makeUserToken, setSession, clearSession, authenticateUser, ensureDefaultAdmin } from './auth'
 import { recomputeAll } from './db'
@@ -9,16 +9,36 @@ import parties from './parties'
 import accounts from './accounts'
 import reports from './reports'
 import backup from './backup'
-import webdav, { executeWebDAVBackup } from './webdav'
+import webdav, { executeWebDAVBackup, getWebDAVConfig } from './webdav'
 import users from './users'
 import repairs from './repairs'
 
 const app = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>()
 
+// 每日兜底自动备份：cron 触发在免费套餐下投递不可靠，本机制保证只要每天有人访问系统就有备份。
+// 距上次备份超过 26 小时且已启用 WebDAV 时，在响应后后台补一次（带 15 分钟运行锁防并发）。
+async function maybeAutoBackup(c: Context<{ Bindings: Env; Variables: { user: AuthUser } }>) {
+  try {
+    const db = c.env.DB
+    const lastRow = await db.prepare("SELECT value FROM sys_config WHERE key = 'webdav_last_backup_at'").first<{ value: string }>()
+    const last = lastRow?.value ? new Date(lastRow.value).getTime() : 0
+    if (Date.now() - last < 26 * 3600_000) return
+    const st = await db.prepare("SELECT value FROM sys_config WHERE key = 'webdav_sched_last_status'").first<{ value: string }>()
+    const at = await db.prepare("SELECT value FROM sys_config WHERE key = 'webdav_sched_last_at'").first<{ value: string }>()
+    if (st?.value === 'running' && at?.value && Date.now() - new Date(at.value).getTime() < 15 * 60_000) return
+    const cfg = await getWebDAVConfig(db)
+    if (!cfg.enabled || !cfg.url) return
+    c.executionCtx.waitUntil(executeWebDAVBackup(db, { source: 'auto' }))
+  } catch {
+    // 自动兜底失败不影响业务请求
+  }
+}
+
 // 所有 API 请求前确保表结构存在（幂等）
 app.use('/api/*', async (c, next) => {
   await ensureSchema(c.env.DB)
   await ensureDefaultAdmin(c.env.DB, c.env.ADMIN_PASSWORD)
+  await maybeAutoBackup(c)
   return next()
 })
 
@@ -135,7 +155,7 @@ export default {
       (async () => {
         try {
           await ensureSchema(env.DB)
-          const res = await executeWebDAVBackup(env.DB)
+          const res = await executeWebDAVBackup(env.DB, { source: 'cron' })
           console.log('[WebDAV Cron] 定时备份结果:', JSON.stringify(res))
         } catch (e) {
           console.error('[WebDAV Cron] 定时备份异常:', e)
