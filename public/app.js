@@ -190,28 +190,6 @@ const app = createApp({
       for (const p of this.products) if (p.category) set.add(p.category)
       return [...set]
     },
-    async fixNegativeStock() {
-      try {
-        const res = await api('/products/fix-negative-stock', { method: 'POST' })
-        if (!res.total) return this.toast('当前没有负库存商品')
-        const names = res.fixed.map((x) => `${x.name}（原 ${x.before}）`).join('、')
-        const ok = confirm(`发现 ${res.total} 个负库存商品：\n${names}\n\n将全部调整为 0（生成盘盈调整记录，不影响资金与均价）。确认执行吗？`)
-        if (!ok) return this.toast('已取消')
-        this.fixingNegStock = true
-        await api('/products/fix-negative-stock', { method: 'POST' })
-        ;[this.products, this.adjustments] = await Promise.all([api('/products'), api('/adjustments')])
-        this.toast(`已修正 ${res.total} 个负库存商品为 0`)
-      } catch (e) {
-        this.toast(e.message, 'err')
-      } finally {
-        this.fixingNegStock = false
-      }
-    },
-    cashAccountId() {
-      if (!this.accounts || !this.accounts.length) return ''
-      const cash = this.accounts.find((a) => (a.name || '').includes('现金'))
-      return cash ? cash.id : this.accounts[0].id
-    },
     stockFiltered() {
       return this.products.filter((p) => {
         if (p.archived) return false
@@ -270,6 +248,30 @@ const app = createApp({
       if (this.currentUser.role === 'admin') return true
       const perms = this.currentUser.permissions || []
       return perms.includes(key)
+    },
+    // 默认收款账户：名为「现金」的账户，否则第一个账户
+    cashAccountId() {
+      if (!this.accounts || !this.accounts.length) return ''
+      const cash = this.accounts.find((a) => (a.name || '').includes('现金'))
+      return cash ? cash.id : this.accounts[0].id
+    },
+    // 负库存一键修正为 0
+    async fixNegativeStock() {
+      try {
+        const res = await api('/products/fix-negative-stock', { method: 'POST' })
+        if (!res.total) return this.toast('当前没有负库存商品')
+        const names = res.fixed.map((x) => `${x.name}（原 ${x.before}）`).join('、')
+        const ok = confirm(`发现 ${res.total} 个负库存商品：\n${names}\n\n将全部调整为 0（生成盘盈调整记录，不影响资金与均价）。确认执行吗？`)
+        if (!ok) return this.toast('已取消')
+        this.fixingNegStock = true
+        await api('/products/fix-negative-stock', { method: 'POST' })
+        ;[this.products, this.adjustments] = await Promise.all([api('/products'), api('/adjustments')])
+        this.toast(`已修正 ${res.total} 个负库存商品为 0`)
+      } catch (e) {
+        this.toast(e.message, 'err')
+      } finally {
+        this.fixingNegStock = false
+      }
     },
     navVisible(item) {
       if (item.key === 'settings' && this.currentUser?.role !== 'admin') return false
