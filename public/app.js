@@ -105,6 +105,7 @@ const app = createApp({
 
       // 商品
       stockFilter: '',   // 库存查询分类: ''全部 / 'in'有库存 / 'zero'零库存
+      fixingNegStock: false,
       cleaningDup: false,
       prodSearch: '',
       prodCategory: '',
@@ -188,6 +189,23 @@ const app = createApp({
       const set = new Set()
       for (const p of this.products) if (p.category) set.add(p.category)
       return [...set]
+    },
+    async fixNegativeStock() {
+      try {
+        const res = await api('/products/fix-negative-stock', { method: 'POST' })
+        if (!res.total) return this.toast('当前没有负库存商品')
+        const names = res.fixed.map((x) => `${x.name}（原 ${x.before}）`).join('、')
+        const ok = confirm(`发现 ${res.total} 个负库存商品：\n${names}\n\n将全部调整为 0（生成盘盈调整记录，不影响资金与均价）。确认执行吗？`)
+        if (!ok) return this.toast('已取消')
+        this.fixingNegStock = true
+        await api('/products/fix-negative-stock', { method: 'POST' })
+        ;[this.products, this.adjustments] = await Promise.all([api('/products'), api('/adjustments')])
+        this.toast(`已修正 ${res.total} 个负库存商品为 0`)
+      } catch (e) {
+        this.toast(e.message, 'err')
+      } finally {
+        this.fixingNegStock = false
+      }
     },
     stockFiltered() {
       return this.products.filter((p) => {

@@ -207,6 +207,23 @@ app.post('/products/:id/adjustments', async (c) => {
   return c.json({ ok: true }, 201)
 })
 
+// 一键把负库存修正为 0：为每个负库存商品补一条盘盈调整记录（不影响资金/均价）
+app.post('/products/fix-negative-stock', async (c) => {
+  const db = c.env.DB
+  const negs = await db
+    .prepare('SELECT id, name, stock FROM products WHERE archived = 0 AND no_stock = 0 AND stock < 0 ORDER BY id')
+    .all<{ id: number; name: string; stock: number }>()
+  const list = negs.results ?? []
+  const stmts: D1PreparedStatement[] = []
+  for (const p of list) {
+    const fixQty = -p.stock // 正数盘盈
+    stmts.push(db.prepare('INSERT INTO adjustments (product_id, qty, reason) VALUES (?1, ?2, ?3)').bind(p.id, fixQty, '负库存一键修正为0'))
+    stmts.push(db.prepare('UPDATE products SET stock = 0 WHERE id = ?1').bind(p.id))
+  }
+  if (stmts.length) await db.batch(stmts)
+  return c.json({ ok: true, fixed: list.map((p) => ({ id: p.id, name: p.name, before: p.stock })), total: list.length })
+})
+
 app.get('/adjustments', async (c) => {
   const limit = Math.min(500, Number(c.req.query('limit')) || 100)
   const res = await c.env.DB

@@ -615,6 +615,7 @@
               <button type="button" class="btn-sm" :class="{ 'btn-primary': !stockFilter }" @click="stockFilter = ''">全部 {{ products.filter(p => !p.archived).length }}</button>
               <button type="button" class="btn-sm" :class="{ 'btn-primary': stockFilter === 'in' }" @click="stockFilter = 'in'">有库存 {{ products.filter(p => !p.archived && !p.no_stock && Number(p.stock) > 0).length }}</button>
               <button type="button" class="btn-sm" :class="{ 'btn-primary': stockFilter === 'zero' }" @click="stockFilter = 'zero'">零库存 {{ products.filter(p => !p.archived && !p.no_stock && Number(p.stock) === 0).length }}</button>
+              <button class="btn-sm btn-danger" :disabled="fixingNegStock" @click="fixNegativeStock">{{ fixingNegStock ? '修正中...' : '负库存一键调为0' }}</button>
               <button class="btn-sm" @click="printStock">打印库存清单</button>
             </div>
             <div class="table-wrap">
