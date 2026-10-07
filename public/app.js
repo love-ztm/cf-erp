@@ -207,6 +207,11 @@ const app = createApp({
         this.fixingNegStock = false
       }
     },
+    cashAccountId() {
+      if (!this.accounts || !this.accounts.length) return ''
+      const cash = this.accounts.find((a) => (a.name || '').includes('现金'))
+      return cash ? cash.id : this.accounts[0].id
+    },
     stockFiltered() {
       return this.products.filter((p) => {
         if (p.archived) return false
@@ -275,7 +280,7 @@ const app = createApp({
       localStorage.setItem('erp_hide_balance', this.hideBalance ? '1' : '0')
     },
     blankOrder() {
-      return { supplier_id: '', customer_id: '', name_free: '', note: '', discount: '', paid: '', account_id: '', date: '', items: [{ product_id: '', qty: '', price: '' }] }
+      return { supplier_id: '', customer_id: '', name_free: '', note: '', discount: '', paid: '', account_id: this.cashAccountId(), date: '', items: [{ product_id: '', qty: '', price: '' }] }
     },
     money(n) { return '¥' + (Math.round((Number(n) || 0) * 100) / 100).toFixed(2) },
     qfmt(n) {
@@ -687,6 +692,9 @@ const app = createApp({
       this.products = products
       this.parties = parties
       this.accounts = accounts
+      // 默认收款/付款账户 = 现金；用户未手动选过时自动填充
+      if (!this.purchaseForm.account_id) this.purchaseForm.account_id = this.cashAccountId()
+      if (!this.saleForm.account_id) this.saleForm.account_id = this.cashAccountId()
       if (kind === 'purchase') this.purchases = orders
       else this.sales = orders
     },
@@ -724,6 +732,7 @@ const app = createApp({
       this.products = products
       this.parties = parties
       this.accounts = accounts
+      if (this.repairForm && !this.repairForm.account_id) this.repairForm.account_id = this.cashAccountId()
       this.repairs = list
     },
     setRepairStatusFilter(s) {
@@ -731,7 +740,7 @@ const app = createApp({
       this.loadRepairs()
     },
     blankRepair() {
-      return { id: null, customer_id: '', name_free: '', phone: '', device: '', fault: '', solution: '', fee: '', discount: '', paid: '', account_id: '', note: '', date: '', items: [{ product_id: '', qty: '', price: '' }] }
+      return { id: null, customer_id: '', name_free: '', phone: '', device: '', fault: '', solution: '', fee: '', discount: '', paid: '', account_id: this.cashAccountId(), note: '', date: '', items: [{ product_id: '', qty: '', price: '' }] }
     },
     openRepairModal(existing) {
       if (existing) {
@@ -896,6 +905,7 @@ const app = createApp({
       this.accounts = accounts
       this.funds = funds
       this.parties = parties
+      if (this.fundModal && !this.fundModal.account_id) this.fundModal.account_id = this.cashAccountId()
     },
     // 资金流水快捷区间：month 当月 / prev 上月 / all 全部
     setFundRange(mode) {
@@ -1410,7 +1420,7 @@ const app = createApp({
 
     // ===== 资金 =====
     openFundModal(type) {
-      this.fundModal = { type, party_id: '', account_id: '', amount: '', note: '', date: '' }
+      this.fundModal = { type, party_id: '', account_id: this.cashAccountId(), amount: '', note: '', date: '' }
     },
     fundPartyLabel(type) {
       if (type === 'receipt') return '客户 *'
