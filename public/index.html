@@ -194,6 +194,7 @@
           <div class="card">
             <div class="toolbar">
               <input v-model="prodSearch" placeholder="搜索名称 / 编号 / 条码" style="width:220px" />
+              <button type="button" class="btn-sm" title="手机扫码查找商品" @click="scanToSearch">📷</button>
               <select v-model="prodCategory" style="width:140px">
                 <option value="">全部类别</option>
                 <option v-for="cst in categories" :key="cst" :value="cst">{{ cst }}</option>
@@ -1709,6 +1710,20 @@
       </div>
     </div>
 
+    <!-- 条码扫码弹窗（手机摄像头实时扫码） -->
+    <div class="modal-mask scan-mask" v-if="scanOpen" @click.self="closeScanner">
+      <div class="modal" style="max-width:420px">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
+          <h3 style="margin:0">📷 条码扫码</h3>
+          <button type="button" @click="closeScanner">✕</button>
+        </div>
+        <p class="text-muted" style="font-size:12.5px; margin-bottom:10px">对准商品条码，识别后自动匹配并填入。</p>
+        <div id="scan-region" style="width:100%; height:260px; border-radius:10px; overflow:hidden; background:#0f172a"></div>
+        <div v-if="scanBusy" class="text-muted" style="font-size:12px; margin-top:10px; text-align:center">摄像头启动中…</div>
+        <div v-if="scanError" class="text-danger" style="font-size:12.5px; margin-top:10px; text-align:center">{{ scanError }}</div>
+      </div>
+    </div>
+
     <!-- 全局提示 -->
     <transition name="toast">
       <div v-if="toastMsg" class="toast" :class="toastType">{{ toastMsg }}</div>
@@ -1716,6 +1731,7 @@
   </script>
 
   <script src="/vendor/vue.global.prod.js?v=BUILD_VERSION"></script>
+  <script src="/vendor/html5-qrcode.min.js?v=BUILD_VERSION"></script>
   <script src="/app.js?v=BUILD_VERSION"></script>
 </body>
 </html>

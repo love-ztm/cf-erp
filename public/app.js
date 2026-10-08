@@ -98,6 +98,11 @@ const app = createApp({
       // 采购/销售记录筛选（默认当月；留空显示全部）
       ordFrom: monthStartStr(),
       ordTo: todayStr(),
+      // 条码扫码
+      scanOpen: false,
+      scanBusy: false,
+      scanError: '',
+      scanOnResult: null,   // 扫码成功回调
       // 资金流水筛选（默认当月 + 全部类型）
       fundFrom: monthStartStr(),
       fundTo: todayStr(),
@@ -280,6 +285,54 @@ const app = createApp({
     toggleBalance() {
       this.hideBalance = !this.hideBalance
       localStorage.setItem('erp_hide_balance', this.hideBalance ? '1' : '0')
+    },
+    // ===== 条码扫码 =====
+    openScanner(onResult) {
+      this.scanOnResult = onResult
+      this.scanError = ''
+      this.scanOpen = true
+      this.scanBusy = true
+      this.$nextTick(() => this.initHtml5Qr())
+    },
+    initHtml5Qr() {
+      if (typeof Html5Qrcode === 'undefined') {
+        this.scanBusy = false
+        this.scanError = '扫码组件未加载，请刷新页面重试'
+        return
+      }
+      try {
+        const qr = new Html5Qrcode('scan-region')
+        this._scanQr = qr
+        qr.start({ facingMode: 'environment' }, { fps: 10, qrbox: { width: 220, height: 220 } }, (text) => {
+          this.handleScanSuccess(String(text || '').trim())
+        }, () => { /* 每帧未识别，忽略 */ })
+          .then(() => { this.scanBusy = false })
+          .catch((e) => {
+            this.scanBusy = false
+            this.scanError = '无法打开摄像头：' + (e && e.message ? e.message : String(e)).slice(0, 80) + '（请允许摄像头权限）'
+          })
+      } catch (e) {
+        this.scanBusy = false
+        this.scanError = '扫码初始化失败：' + (e && e.message ? e.message : String(e)).slice(0, 80)
+      }
+    },
+    async closeScanner() {
+      try {
+        if (this._scanQr) {
+          await this._scanQr.stop()
+          this._scanQr.clear()
+        }
+      } catch { /* 忽略停止错误 */ }
+      this._scanQr = null
+      this.scanOpen = false
+      this.scanBusy = false
+      this.scanOnResult = null
+    },
+    handleScanSuccess(text) {
+      const cb = this.scanOnResult
+      this.closeScanner().then(() => {
+        if (cb) cb(text)
+      })
     },
     blankOrder() {
       return { supplier_id: '', customer_id: '', name_free: '', note: '', discount: '', paid: '', account_id: this.cashAccountId(), date: '', items: [{ product_id: '', qty: '', price: '' }] }
@@ -1021,6 +1074,14 @@ const app = createApp({
     },
 
     // ===== 商品 =====
+    scanToSearch() {
+      this.openScanner((text) => {
+        this.prodSearch = text
+        this.showArchived = false
+        const found = this.products.find((p) => p.barcode && String(p.barcode).trim() === text)
+        this.toast(found ? `已找到：${found.name}` : `未找到条码为「${text}」的商品`)
+      })
+    },
     async cleanupDuplicates() {
       this.cleaningDup = true
       try {
@@ -1537,6 +1598,16 @@ const app = createApp({
   },
   mounted() {
     window.addEventListener('hashchange', this.onHash)
+    // 商品选择器扫码事件：打开扫码，成功后按条码匹配商品
+    document.addEventListener('app:scan-product', (e) => {
+      const picker = e.detail && e.detail.picker
+      this.openScanner((text) => {
+        const found = this.products.find((p) => p.barcode && String(p.barcode).trim() === text)
+        if (!found) return this.toast('未找到条码为「' + text + '」的商品', 'err')
+        picker.pick(found)
+        this.toast('已扫入：' + found.name)
+      })
+    })
     this.onHash()
     // 应用启动时先加载公司配置（公开接口，无需登录），避免刷新后回退到默认值
     api('/settings/company')
@@ -1622,6 +1693,10 @@ app.component('product-picker', {
       this.open = v
       if (v) this.$nextTick(() => this.updatePos())
     },
+    scan() {
+      // 通知主应用打开扫码；扫码成功后按条码匹配商品并选中
+      document.dispatchEvent(new CustomEvent('app:scan-product', { detail: { picker: this } }))
+    },
     updatePos() {
       const el = this.$refs.input
       if (!el || !this.open) return
@@ -1652,11 +1727,14 @@ app.component('product-picker', {
   },
   template: `
     <div style="position:relative">
-      <input ref="input" :value="inputText" :placeholder="placeholder"
-             @input="onInput" @focus="setOpen(true)"
-             @keydown.enter.prevent="onEnter"
-             @keydown.esc="setOpen(false)"
-             @blur="setOpen(false)" style="width:100%" />
+      <div style="display:flex; gap:6px; align-items:center">
+        <input ref="input" :value="inputText" :placeholder="placeholder"
+               @input="onInput" @focus="setOpen(true)"
+               @keydown.enter.prevent="onEnter"
+               @keydown.esc="setOpen(false)"
+               @blur="setOpen(false)" style="width:100%" />
+        <button type="button" class="btn-sm" title="手机扫码录入" @mousedown.prevent @click="scan">📷</button>
+      </div>
       <div class="picker-list" :style="dropStyle" v-if="open && matches.length">
         <div v-for="p in matches" :key="p.id" class="picker-item" @mousedown.prevent="pick(p)" @click="pick(p)">
           {{ p.name }}<span class="text-muted" style="margin-left:6px;font-size:12px">{{ p.sku ? ' ' + p.sku : '' }} · {{ suffix(p) }}</span>

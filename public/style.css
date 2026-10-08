@@ -901,3 +901,7 @@ tbody tr { transition: background .12s; }
 
 /* 侧边栏底部用户信息：居中排版 */
 .side-foot { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; }
+
+/* ===== 条码扫码弹窗 ===== */
+.scan-mask .modal { max-width: 420px; }
+#scan-region video { border-radius: 10px; object-fit: cover; }
