@@ -292,31 +292,95 @@ const app = createApp({
       this.scanError = ''
       this.scanOpen = true
       this.scanBusy = true
-      this.$nextTick(() => this.initHtml5Qr())
+      this.$nextTick(() => this.initScanner())
     },
-    initHtml5Qr() {
-      if (typeof Html5Qrcode === 'undefined') {
-        this.scanBusy = false
-        this.scanError = '扫码组件未加载，请刷新页面重试'
+    // 优先用浏览器原生 BarcodeDetector（安卓 Chrome/Edge：对焦快、识别准、不模糊），
+    // 不支持时回退 html5-qrcode（iOS Safari / 桌面 Firefox 等）
+    initScanner() {
+      this.scanBusy = false
+      if (window.BarcodeDetector) {
+        this.startNativeScanner()
+      } else if (typeof Html5Qrcode !== 'undefined') {
+        this.startHtml5Qr()
+      } else {
+        this.scanError = '当前浏览器不支持扫码，请用 Chrome 或微信打开'
+      }
+    },
+    async startNativeScanner() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            aspectRatio: { ideal: 1.3333 },
+          },
+          audio: false,
+        })
+        const region = document.getElementById('scan-region')
+        const video = document.createElement('video')
+        video.srcObject = stream
+        video.muted = true
+        video.setAttribute('playsinline', 'true')
+        video.setAttribute('autoplay', 'true')
+        video.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:10px'
+        region.innerHTML = ''
+        region.appendChild(video)
+        await video.play()
+        this._scanVideo = video
+        this._scanStream = stream
+        this._scanDetector = new BarcodeDetector({
+          formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code', 'itf', 'codabar'],
+        })
+        this._scanRaf = requestAnimationFrame(this.scanLoop)
+      } catch (e) {
+        this.scanError = '无法打开摄像头：' + ((e && e.message) || String(e)).slice(0, 80) + '（请允许摄像头权限）'
+      }
+    },
+    async scanLoop() {
+      if (!this.scanOpen || !this._scanVideo || this._scanVideo.readyState < 2) {
+        this._scanRaf = requestAnimationFrame(this.scanLoop)
         return
       }
       try {
+        const codes = await this._scanDetector.detect(this._scanVideo)
+        if (codes && codes.length && codes[0].rawValue) {
+          this.handleScanSuccess(String(codes[0].rawValue).trim())
+          return
+        }
+      } catch { /* 单帧失败继续 */ }
+      this._scanRaf = requestAnimationFrame(this.scanLoop)
+    },
+    startHtml5Qr() {
+      try {
         const qr = new Html5Qrcode('scan-region')
         this._scanQr = qr
-        qr.start({ facingMode: 'environment' }, { fps: 10, qrbox: { width: 220, height: 220 } }, (text) => {
-          this.handleScanSuccess(String(text || '').trim())
-        }, () => { /* 每帧未识别，忽略 */ })
+        qr.start(
+          { facingMode: 'environment' },
+          { fps: 15, qrbox: { width: 200, height: 200 }, aspectRatio: 1.3333 },
+          (text) => this.handleScanSuccess(String(text || '').trim()),
+          () => { /* 每帧未识别，忽略 */ }
+        )
           .then(() => { this.scanBusy = false })
           .catch((e) => {
             this.scanBusy = false
-            this.scanError = '无法打开摄像头：' + (e && e.message ? e.message : String(e)).slice(0, 80) + '（请允许摄像头权限）'
+            this.scanError = '无法打开摄像头：' + ((e && e.message) || String(e)).slice(0, 80) + '（请允许摄像头权限）'
           })
       } catch (e) {
         this.scanBusy = false
-        this.scanError = '扫码初始化失败：' + (e && e.message ? e.message : String(e)).slice(0, 80)
+        this.scanError = '扫码初始化失败：' + ((e && e.message) || String(e)).slice(0, 80)
       }
     },
     async closeScanner() {
+      if (this._scanRaf) { cancelAnimationFrame(this._scanRaf); this._scanRaf = null }
+      try {
+        if (this._scanStream) {
+          this._scanStream.getTracks().forEach((t) => t.stop())
+        }
+      } catch { /* 忽略 */ }
+      this._scanStream = null
+      this._scanVideo = null
+      this._scanDetector = null
       try {
         if (this._scanQr) {
           await this._scanQr.stop()
@@ -326,6 +390,7 @@ const app = createApp({
       this._scanQr = null
       this.scanOpen = false
       this.scanBusy = false
+      this.scanError = ''
       this.scanOnResult = null
     },
     handleScanSuccess(text) {
@@ -1078,7 +1143,7 @@ const app = createApp({
       this.openScanner((text) => {
         this.prodSearch = text
         this.showArchived = false
-        const found = this.products.find((p) => p.barcode && String(p.barcode).trim() === text)
+        const found = this.products.find((p) => (p.barcode && String(p.barcode).trim() === text) || (p.sku && String(p.sku).trim() === text))
         this.toast(found ? `已找到：${found.name}` : `未找到条码为「${text}」的商品`)
       })
     },
@@ -1602,7 +1667,7 @@ const app = createApp({
     document.addEventListener('app:scan-product', (e) => {
       const picker = e.detail && e.detail.picker
       this.openScanner((text) => {
-        const found = this.products.find((p) => p.barcode && String(p.barcode).trim() === text)
+        const found = this.products.find((p) => (p.barcode && String(p.barcode).trim() === text) || (p.sku && String(p.sku).trim() === text))
         if (!found) return this.toast('未找到条码为「' + text + '」的商品', 'err')
         picker.pick(found)
         this.toast('已扫入：' + found.name)
