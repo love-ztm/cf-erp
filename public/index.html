@@ -1710,7 +1710,9 @@
     </div>
 
     <!-- 全局提示 -->
-    <div v-if="toastMsg" class="toast" :class="toastType">{{ toastMsg }}</div>
+    <transition name="toast">
+      <div v-if="toastMsg" class="toast" :class="toastType">{{ toastMsg }}</div>
+    </transition>
   </script>
 
   <script src="/vendor/vue.global.prod.js?v=BUILD_VERSION"></script>

@@ -836,3 +836,68 @@ button:disabled {
   .grid-cards { grid-template-columns: 1fr 1fr; }
   .settings-grid { grid-template-columns: 1fr; }
 }
+
+/* ===== 视觉升级（2026-10） ===== */
+
+/* 滚动条：细条 + 主题色 */
+* { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+.sidebar::-webkit-scrollbar-thumb, .boot-screen::-webkit-scrollbar-thumb { background: #334155; }
+.sidebar { scrollbar-color: #334155 transparent; }
+
+/* 统一焦点环：键盘操作时蓝色光晕 */
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--primary-glow);
+  border-color: var(--primary);
+}
+
+/* 弹窗入场：淡入 + 上移缩放 */
+.modal { animation: modalIn .22s cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes modalIn {
+  from { opacity: 0; transform: translateY(14px) scale(.98); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Toast 离场过渡（入场沿用 slideDown） */
+.toast-leave-active { transition: opacity .18s ease, transform .18s ease; }
+.toast-leave-to { opacity: 0; transform: translate(-50%, -8px); }
+
+/* 页面标题：左竖条渐变 + 标题渐变文字 */
+.page-title::before {
+  background: linear-gradient(180deg, var(--primary-light), var(--purple));
+  box-shadow: 0 0 8px var(--primary-glow);
+}
+.page-title {
+  background: linear-gradient(120deg, #1e3a8a 0%, #2563eb 55%, #6d28d9 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* 空状态：柔和图标 + 间距 */
+.empty::before {
+  content: "· · ·";
+  display: block;
+  font-size: 22px;
+  letter-spacing: 8px;
+  opacity: .35;
+  margin-bottom: 10px;
+}
+
+/* 主按钮：hover 微上浮 */
+.btn-primary { transition: transform .15s cubic-bezier(0.4, 0, 0.2, 1), box-shadow .15s, background .15s; }
+.btn-primary:hover { transform: translateY(-1px); box-shadow: var(--shadow-glow); }
+
+/* 表格行：hover 淡蓝底（通用表也加上，与 click-rows 区分但更清晰） */
+tbody tr { transition: background .12s; }
+
+/* 工具条/筛选按钮组 hover 反馈 */
+.btn-sm { transition: transform .12s, background .12s, box-shadow .12s; }
+.btn-sm:hover { transform: translateY(-1px); }
+
+/* 侧边栏底部用户信息：居中排版 */
+.side-foot { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; }
