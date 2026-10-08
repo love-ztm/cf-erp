@@ -1220,7 +1220,7 @@
         <div class="form-grid">
           <div><label>名称 *</label><input v-model="prodModal.name" placeholder="商品名称" /></div>
           <div><label>编号 SKU</label><input v-model="prodModal.sku" placeholder="自动顺排，可修改" /></div>
-          <div><label>条码</label><input v-model="prodModal.barcode" placeholder="可选" /></div>
+          <div><label>条码</label><span style="display:flex; gap:6px; align-items:center"><input v-model="prodModal.barcode" placeholder="可选，或点 📷 扫码录入" style="flex:1" /><button type="button" class="btn-sm" title="手机扫码录入条码" @mousedown.prevent @click="scanToBarcode">📷</button></span></div>
           <div><label>类别</label><input v-model="prodModal.category" placeholder="如 饮料 / 零食" list="cat-list" /></div>
           <div><label>单位</label><input v-model="prodModal.unit" placeholder="件 / 千克 / 箱" /></div>
           <template v-if="!prodModal.id && !prodModal.no_stock">

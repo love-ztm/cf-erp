@@ -1139,6 +1139,15 @@ const app = createApp({
     },
 
     // ===== 商品 =====
+    scanToBarcode() {
+      if (!this.prodModal) return
+      this.openScanner((text) => {
+        this.prodModal.barcode = text
+        const dup = this.products.find((p) => p.barcode && String(p.barcode).trim() === text)
+        if (dup && dup.id !== this.prodModal.id) this.toast('该条码已存在：' + dup.name + '（#' + dup.id + '）', 'err')
+        else this.toast('已录入条码：' + text)
+      })
+    },
     scanToSearch() {
       this.openScanner((text) => {
         this.prodSearch = text
