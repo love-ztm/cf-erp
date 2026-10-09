@@ -103,6 +103,11 @@ const app = createApp({
       scanBusy: false,
       scanError: '',
       scanOnResult: null,   // 扫码成功回调
+      scanTorch: false,     // 闪光灯
+      scanZoom: 1,          // 当前缩放
+      scanZoomMax: 1,
+      scanCanTorch: false,
+      scanCanZoom: false,
       // 资金流水筛选（默认当月 + 全部类型）
       fundFrom: monthStartStr(),
       fundTo: todayStr(),
@@ -311,9 +316,12 @@ const app = createApp({
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { ideal: 'environment' },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            frameRate: { ideal: 30 },
             aspectRatio: { ideal: 1.3333 },
+            // 请求连续自动对焦（支持的设备会持续跟踪对焦，大幅减少模糊）
+            advanced: [{ focusMode: 'continuous' }],
           },
           audio: false,
         })
@@ -329,6 +337,22 @@ const app = createApp({
         await video.play()
         this._scanVideo = video
         this._scanStream = stream
+        this._scanTrack = stream.getVideoTracks()[0] || null
+        // 读取设备能力：闪光灯 / 缩放
+        this.scanCanTorch = false
+        this.scanCanZoom = false
+        this.scanZoomMax = 1
+        this.scanZoom = 1
+        if (this._scanTrack && typeof this._scanTrack.getCapabilities === 'function') {
+          try {
+            const caps = this._scanTrack.getCapabilities()
+            this.scanCanTorch = !!(caps && caps.torch)
+            if (caps && caps.zoom) {
+              this.scanCanZoom = true
+              this.scanZoomMax = Math.round(caps.zoom.max * 10) / 10
+            }
+          } catch { /* 忽略能力读取失败 */ }
+        }
         this._scanDetector = new BarcodeDetector({
           formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code', 'itf', 'codabar'],
         })
@@ -371,6 +395,26 @@ const app = createApp({
         this.scanError = '扫码初始化失败：' + ((e && e.message) || String(e)).slice(0, 80)
       }
     },
+    async toggleScanTorch() {
+      if (!this._scanTrack) return this.toast('当前设备不支持闪光灯', 'err')
+      try {
+        const next = !this.scanTorch
+        await this._scanTrack.applyConstraints({ advanced: [{ torch: next }] })
+        this.scanTorch = next
+      } catch {
+        this.toast('当前设备不支持闪光灯', 'err')
+      }
+    },
+    async zoomScan(dir) {
+      if (!this._scanTrack || !this.scanCanZoom) return this.toast('当前设备不支持镜头缩放', 'err')
+      try {
+        const next = Math.min(this.scanZoomMax, Math.max(1, +(this.scanZoom + dir * 0.5).toFixed(2)))
+        await this._scanTrack.applyConstraints({ advanced: [{ zoom: next }] })
+        this.scanZoom = next
+      } catch {
+        this.toast('镜头缩放失败', 'err')
+      }
+    },
     async closeScanner() {
       if (this._scanRaf) { cancelAnimationFrame(this._scanRaf); this._scanRaf = null }
       try {
@@ -379,8 +423,14 @@ const app = createApp({
         }
       } catch { /* 忽略 */ }
       this._scanStream = null
+      this._scanTrack = null
       this._scanVideo = null
       this._scanDetector = null
+      this.scanTorch = false
+      this.scanZoom = 1
+      this.scanZoomMax = 1
+      this.scanCanTorch = false
+      this.scanCanZoom = false
       try {
         if (this._scanQr) {
           await this._scanQr.stop()
