@@ -407,12 +407,12 @@
               <span class="text-muted">合计 {{ money(saleTotal) }}</span>
               <span class="text-muted">应收 {{ money(saleNet) }}</span>
               <strong :class="saleNet - Number(saleForm.paid || 0) > 0 ? 'text-danger' : ''">欠款 {{ money(saleNet - Number(saleForm.paid || 0)) }}</strong>
-              <span class="text-muted">预计毛利 <button type="button" style="background:none;border:none;cursor:pointer;padding:0 2px;font-size:13px;line-height:1;color:inherit;opacity:.7" :title="saleShowProfit ? '点击隐藏预计毛利' : '点击查看预计毛利'" @click="saleShowProfit = !saleShowProfit">{{ saleShowProfit ? '🙈' : '👁' }}</button></span>
+              <span class="text-muted">预计毛利 <button type="button" style="background:none;border:none;cursor:pointer;padding:0 2px;font-size:13px;line-height:1;color:inherit;opacity:.7" :title="saleShowProfit ? '点击隐藏毛利与成本' : '点击查看毛利与成本'" @click="toggleSaleProfit">{{ saleShowProfit ? '🙈' : '👁' }}</button></span>
               <strong v-if="saleShowProfit" :class="saleProfit - Number(saleForm.discount || 0) >= 0 ? 'text-green' : 'text-danger'">{{ money(saleProfit - Number(saleForm.discount || 0)) }}</strong>
               <button @click="addRow(saleForm)">＋ 加一行</button>
               <button @click="addManualRow(saleForm)">＋ 手填项</button>
               <button @click="addNewProduct('saleForm')">＋ 新商品</button>
-              <button type="button" class="btn-sm" @click="saleShowCost = !saleShowCost" :title="saleShowCost ? '点击隐藏成本列' : '点击查看成本列'">{{ saleShowCost ? '🙈 隐藏成本' : '👁 查看成本' }}</button>
+
               <button class="btn-primary" :disabled="submitting" @click="submitOrder('sales')">提交出库</button>
             </div>
           </div>

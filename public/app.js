@@ -128,8 +128,8 @@ const app = createApp({
       adjustModal: null, // { product, qty, reason }
 
       // 订单
-      purchaseForm: { supplier_id: '', customer_id: '', name_free: '', note: '', discount: '', paid: '', account_id: '', items: [{ product_id: '', qty: '', price: '' }] },
-      saleForm: { supplier_id: '', customer_id: '', name_free: '', note: '', discount: '', paid: '', account_id: '', items: [{ product_id: '', qty: '', price: '' }] },
+      purchaseForm: { supplier_id: '', customer_id: '', name_free: '', note: '', discount: '', paid: '', account_id: '', items: [{ product_id: '', qty: 1, price: '' }] },
+      saleForm: { supplier_id: '', customer_id: '', name_free: '', note: '', discount: '', paid: '', account_id: '', items: [{ product_id: '', qty: 1, price: '' }] },
       orderDetail: null,
       orderDetailType: 'purchase',
       orderEdit: null,
@@ -1330,6 +1330,11 @@ const app = createApp({
       if (!this.customers || !this.customers.length) return ''
       const c = this.customers.find((x) => (x.name || '').includes('店面常规客户'))
       return c ? c.id : ''
+    },
+    toggleSaleProfit() {
+      // 查看毛利的同时同步显示成本列
+      this.saleShowProfit = !this.saleShowProfit
+      this.saleShowCost = this.saleShowProfit
     },
     syncSalePaid() {
       // 本次收款默认自动等于小计净额；人工改过后保持人工值
