@@ -374,7 +374,7 @@
             </div>
             <div class="table-wrap">
               <table class="items-edit">
-                <thead><tr><th style="min-width:200px">商品</th><th>数量</th><th>单价（售价）</th><th v-show="saleShowCost">成本 <button type="button" class="btn-sm" style="padding:1px 6px;font-size:11px" :title="saleShowCost ? '点击隐藏成本' : '点击查看成本'" @click.prevent="saleShowCost = !saleShowCost">{{ saleShowCost ? '隐藏' : '查看' }}</button></th><th class="num">小计</th><th></th></tr></thead>
+                <thead><tr><th style="min-width:200px">商品</th><th>数量</th><th>单价（售价）</th><th v-show="saleShowCost">成本 <button type="button" style="background:none;border:none;cursor:pointer;padding:0 2px;font-size:13px;line-height:1;color:inherit;opacity:.7" :title="saleShowCost ? '点击隐藏成本' : '点击查看成本'" @click.prevent="saleShowCost = !saleShowCost">{{ saleShowCost ? '🙈' : '👁' }}</button></th><th class="num">小计</th><th></th></tr></thead>
                 <tbody>
                   <tr v-for="(it, i) in saleForm.items" :key="i">
                     <td style="min-width:230px">
@@ -407,8 +407,9 @@
               <span class="text-muted">合计 {{ money(saleTotal) }}</span>
               <span class="text-muted">应收 {{ money(saleNet) }}</span>
               <strong :class="saleNet - Number(saleForm.paid || 0) > 0 ? 'text-danger' : ''">欠款 {{ money(saleNet - Number(saleForm.paid || 0)) }}</strong>
-              <span class="text-muted">预计毛利</span>
-              <strong :class="saleProfit - Number(saleForm.discount || 0) >= 0 ? 'text-green' : 'text-danger'">{{ money(saleProfit - Number(saleForm.discount || 0)) }}</strong>
+              <span class="text-muted">预计毛利 <button type="button" style="background:none;border:none;cursor:pointer;padding:0 2px;font-size:13px;line-height:1;color:inherit;opacity:.7" :title="saleShowProfit ? '点击隐藏预计毛利' : '点击查看预计毛利'" @click="saleShowProfit = !saleShowProfit">{{ saleShowProfit ? '🙈' : '👁' }}</button></span>
+              <strong v-if="saleShowProfit" :class="saleProfit - Number(saleForm.discount || 0) >= 0 ? 'text-green' : 'text-danger'">{{ money(saleProfit - Number(saleForm.discount || 0)) }}</strong>
+              <span v-else class="text-muted" style="font-size:12px">点击 👁 查看</span>
               <button @click="addRow(saleForm)">＋ 加一行</button>
               <button @click="addManualRow(saleForm)">＋ 手填项</button>
               <button @click="addNewProduct('saleForm')">＋ 新商品</button>

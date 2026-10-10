@@ -117,7 +117,8 @@ const app = createApp({
       stockFilter: '',   // 库存查询分类: ''全部 / 'in'有库存 / 'zero'零库存
       fixingNegStock: false,
       // 销售单快速开单
-      saleShowCost: false,     // 成本列默认隐藏，点开可看
+      saleShowCost: false,     // 成本列默认隐藏（眼睛按钮可看）
+      saleShowProfit: false,   // 预计毛利默认隐藏（眼睛按钮可看）
       salePaidManual: false,   // 本次收款是否被人工改过（默认自动等于小计）
       cleaningDup: false,
       prodSearch: '',
@@ -457,7 +458,7 @@ const app = createApp({
       })
     },
     blankOrder() {
-      return { supplier_id: '', customer_id: '', name_free: '', note: '', discount: '', paid: '', account_id: this.cashAccountId(), date: '', items: [{ product_id: '', qty: '', price: '' }] }
+      return { supplier_id: '', customer_id: '', name_free: '', note: '', discount: '', paid: '', account_id: this.cashAccountId(), date: '', items: [{ product_id: '', qty: 1, price: '' }] }
     },
     money(n) { return '¥' + (Math.round((Number(n) || 0) * 100) / 100).toFixed(2) },
     qfmt(n) {
@@ -921,7 +922,7 @@ const app = createApp({
       this.loadRepairs()
     },
     blankRepair() {
-      return { id: null, customer_id: '', name_free: '', phone: '', device: '', fault: '', solution: '', fee: '', discount: '', paid: '', account_id: this.cashAccountId(), note: '', date: '', items: [{ product_id: '', qty: '', price: '' }] }
+      return { id: null, customer_id: '', name_free: '', phone: '', device: '', fault: '', solution: '', fee: '', discount: '', paid: '', account_id: this.cashAccountId(), note: '', date: '', items: [{ product_id: '', qty: 1, price: '' }] }
     },
     openRepairModal(existing) {
       if (existing) {
@@ -952,10 +953,10 @@ const app = createApp({
       }
     },
     repairAddItem() {
-      if (this.repairForm) this.repairForm.items.push({ product_id: '', qty: '', price: '' })
+      if (this.repairForm) this.repairForm.items.push({ product_id: '', qty: 1, price: '' })
     },
     repairAddManualItem() {
-      if (this.repairForm) this.repairForm.items.push({ manual: true, name: '', qty: '', price: '', cost: '' })
+      if (this.repairForm) this.repairForm.items.push({ manual: true, name: '', qty: 1, price: '', cost: '' })
     },
     repairRemoveItem(i) {
       if (this.repairForm && this.repairForm.items.length > 1) this.repairForm.items.splice(i, 1)
@@ -1334,7 +1335,7 @@ const app = createApp({
       // 本次收款默认自动等于小计净额；人工改过后保持人工值
       if (!this.salePaidManual) this.saleForm.paid = this.saleNet
     },
-    addRow(form) { form.items.push({ product_id: '', qty: '', price: '' }) },
+    addRow(form) { form.items.push({ product_id: '', qty: 1, price: '' }) },
     addManualRow(form) { form.items.push({ manual: true, name: '', qty: '', price: '', cost: '' }) },
     delRow(form, i) { form.items.splice(i, 1) },
     onProductChange(form, row, id) {
@@ -1480,7 +1481,7 @@ const app = createApp({
         }
       }).catch(e => this.toast(e.message, 'err'))
     },
-    addRowEdit() { this.orderEdit.items.push({ product_id: '', qty: '', price: '', origQty: 0 }) },
+    addRowEdit() { this.orderEdit.items.push({ product_id: '', qty: 1, price: '', origQty: 0 }) },
     delRowEdit(i) { this.orderEdit.items.splice(i, 1) },
     onProductChangeEdit(row, id) {
       const p = this.productMap[id !== undefined ? id : row.product_id]
