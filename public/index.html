@@ -441,7 +441,7 @@
                     <td class="num">{{ money(s.paid) }}</td>
                     <td class="num">
                       <span v-if="s.kind === 'return'">—</span>
-                      <span v-else-if="customerSettled(s.customer_id)" class="badge green">✓ 客户已结清</span>
+                      <span v-else-if="customerSettled(s.customer_id)" class="badge green">✓ 已结清</span>
                       <span v-else :class="s.total - s.discount - s.paid > 0 ? 'text-danger' : ''">{{ money(s.total - s.discount - s.paid) }}</span>
                     </td>
                     <td class="num">{{ s.item_count }}</td>
