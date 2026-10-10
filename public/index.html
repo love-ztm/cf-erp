@@ -439,7 +439,11 @@
                     <td>{{ s.customer_name || '散客' }} <span v-if="s.kind === 'return'" class="badge gray">退货</span></td>
                     <td class="num" :class="s.kind === 'return' ? 'text-green' : ''">{{ money(s.kind === 'return' ? -(s.total - s.discount) : s.total - s.discount) }}</td>
                     <td class="num">{{ money(s.paid) }}</td>
-                    <td class="num" :class="s.kind === 'normal' && s.total - s.discount - s.paid > 0 ? 'text-danger' : ''">{{ money(s.kind === 'normal' ? s.total - s.discount - s.paid : 0) }}</td>
+                    <td class="num">
+                      <span v-if="s.kind === 'return'">—</span>
+                      <span v-else-if="customerSettled(s.customer_id)" class="badge green">✓ 客户已结清</span>
+                      <span v-else :class="s.total - s.discount - s.paid > 0 ? 'text-danger' : ''">{{ money(s.total - s.discount - s.paid) }}</span>
+                    </td>
                     <td class="num">{{ s.item_count }}</td>
                     <td class="text-muted">{{ s.note || '' }}</td>
                     <td>

@@ -1326,6 +1326,12 @@ const app = createApp({
     },
 
     // ===== 采购 / 销售 =====
+    customerSettled(customerId) {
+      // 客户当前总欠款 <= 0（含预付）视为已结清
+      if (!customerId) return false
+      const c = this.customers.find((x) => x.id === Number(customerId))
+      return !!(c && Number(c.debt || 0) <= 0)
+    },
     defaultCustomerId() {
       if (!this.customers || !this.customers.length) return ''
       const c = this.customers.find((x) => (x.name || '').includes('店面常规客户'))
