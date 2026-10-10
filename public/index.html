@@ -374,7 +374,7 @@
             </div>
             <div class="table-wrap">
               <table class="items-edit">
-                <thead><tr><th style="min-width:200px">商品</th><th>数量</th><th>单价（售价）</th><th>成本</th><th class="num">小计</th><th></th></tr></thead>
+                <thead><tr><th style="min-width:200px">商品</th><th>数量</th><th>单价（售价）</th><th v-show="saleShowCost">成本 <button type="button" class="btn-sm" style="padding:1px 6px;font-size:11px" :title="saleShowCost ? '点击隐藏成本' : '点击查看成本'" @click.prevent="saleShowCost = !saleShowCost">{{ saleShowCost ? '隐藏' : '查看' }}</button></th><th class="num">小计</th><th></th></tr></thead>
                 <tbody>
                   <tr v-for="(it, i) in saleForm.items" :key="i">
                     <td style="min-width:230px">
@@ -386,7 +386,7 @@
                     </td>
                     <td><input type="number" min="0" step="any" v-model.number="it.qty" style="width:85px" /></td>
                     <td><input type="number" min="0" step="0.01" v-model.number="it.price" style="width:105px" /></td>
-                    <td>
+                    <td v-show="saleShowCost">
                       <input v-if="it.manual" type="number" min="0" step="0.01" v-model.number="it.cost" style="width:105px" placeholder="无则0" />
                       <span v-else class="text-muted" style="font-size:12px">{{ money((productMap[it.product_id] || {}).avg_cost || 0) }}</span>
                     </td>
@@ -398,7 +398,10 @@
             </div>
             <div class="form-grid" style="margin:12px 0">
               <div><label>整单优惠金额</label><input type="number" min="0" step="0.01" v-model.number="saleForm.discount" /></div>
-              <div><label>本次收款</label><input type="number" min="0" step="0.01" v-model.number="saleForm.paid" /></div>
+              <div>
+                <label>本次收款（已自动=应收{{ salePaidManual ? '' : '，改过将保留' }}）</label>
+                <input type="number" min="0" step="0.01" v-model.number="saleForm.paid" @input="salePaidManual = true" />
+              </div>
             </div>
             <div class="total-line">
               <span class="text-muted">合计 {{ money(saleTotal) }}</span>

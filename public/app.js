@@ -116,6 +116,9 @@ const app = createApp({
       // 商品
       stockFilter: '',   // 库存查询分类: ''全部 / 'in'有库存 / 'zero'零库存
       fixingNegStock: false,
+      // 销售单快速开单
+      saleShowCost: false,     // 成本列默认隐藏，点开可看
+      salePaidManual: false,   // 本次收款是否被人工改过（默认自动等于小计）
       cleaningDup: false,
       prodSearch: '',
       prodCategory: '',
@@ -250,6 +253,10 @@ const app = createApp({
       return this.products.reduce((s, p) => s + p.stock * p.avg_cost, 0)
     },
     accountTotal() { return this.accounts.reduce((s, a) => s + (a.balance || 0), 0) },
+  },
+  watch: {
+    saleTotal() { this.syncSalePaid() },
+    'saleForm.discount'() { this.syncSalePaid() },
   },
   methods: {
     // ===== 权限判断 =====
@@ -865,8 +872,10 @@ const app = createApp({
       // 默认收款/付款账户 = 现金；用户未手动选过时自动填充
       if (!this.purchaseForm.account_id) this.purchaseForm.account_id = this.cashAccountId()
       if (!this.saleForm.account_id) this.saleForm.account_id = this.cashAccountId()
+      // 销售开单默认客户 = 店面常规客户
+      if (kind === 'sales' && !this.saleForm.customer_id) this.saleForm.customer_id = this.defaultCustomerId()
       if (kind === 'purchase') this.purchases = orders
-      else this.sales = orders
+      else { this.sales = orders; this.syncSalePaid() }
     },
     // 采购/销售记录快捷区间：month 当月 / prev 上月 / all 全部
     setOrdRange(mode) {
@@ -1316,6 +1325,15 @@ const app = createApp({
     },
 
     // ===== 采购 / 销售 =====
+    defaultCustomerId() {
+      if (!this.customers || !this.customers.length) return ''
+      const c = this.customers.find((x) => (x.name || '').includes('店面常规客户'))
+      return c ? c.id : ''
+    },
+    syncSalePaid() {
+      // 本次收款默认自动等于小计净额；人工改过后保持人工值
+      if (!this.salePaidManual) this.saleForm.paid = this.saleNet
+    },
     addRow(form) { form.items.push({ product_id: '', qty: '', price: '' }) },
     addManualRow(form) { form.items.push({ manual: true, name: '', qty: '', price: '', cost: '' }) },
     delRow(form, i) { form.items.splice(i, 1) },
@@ -1355,6 +1373,7 @@ const app = createApp({
         await api('/' + (kind === 'purchase' ? 'purchases' : 'sales'), { method: 'POST', body })
         this.toast(kind === 'purchase' ? '入库成功' : '出库成功')
         this.purchaseForm = this.blankOrder()
+        this.salePaidManual = false
         this.saleForm = this.blankOrder()
         await this.loadOrders(kind)
       } catch (e) {
