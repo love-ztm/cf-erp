@@ -1110,22 +1110,22 @@
             <div class="page-title">系统设置</div>
           </div>
           <div class="settings-grid">
-            <!-- 左列：系统配置与WebDAV -->
-            <div class="settings-col">
+          <!-- 双网盘并排 -->
+          <div class="webdav-grid">
               <!-- WebDAV 远程自动定时备份 -->
               <div class="card">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
                   <h3 style="margin:0">☁️ WebDAV 备份 1（主）</h3>
                   <label style="display:flex; align-items:center; gap:6px; margin:0; cursor:pointer">
                     <input type="checkbox" v-model="webdav.enabled" style="width:auto" />
                     <span>启用自动备份</span>
                   </label>
                 </div>
-                <p class="text-muted" style="margin-bottom:14px; font-size:12.5px">
+                <p class="text-muted" style="margin-bottom:8px; font-size:12.5px">
                   支持坚果云、群晖 NAS、AList 等。启用后 Cloudflare Cron <strong>每天北京时间凌晨 02:00 自动生成全量备份并静默上传</strong>。
                 </p>
 
-                <div v-if="webdav.last_backup_at" style="background:#f8fafc; padding:10px 12px; border-radius:8px; margin-bottom:14px; font-size:12px; border:1px solid var(--line)">
+                <div v-if="webdav.last_backup_at" style="background:#f8fafc; padding:8px 10px; border-radius:8px; margin-bottom:8px; font-size:12px; border:1px solid var(--line)">
                   <div>上次备份时间：<strong>{{ dt(webdav.last_backup_at) }}</strong></div>
                   <div style="margin-top:3px">
                     状态：
@@ -1145,7 +1145,7 @@
                 </div>
 
                 <form @submit.prevent="saveWebDAVConfig(1)">
-                  <div class="form-row">
+                  <div class="form-row" style="margin-bottom:10px">
                     <label>WebDAV 服务器地址 (URL) *</label>
                     <input v-model="webdav.url" placeholder="如 https://dav.jianguoyun.com/dav/" />
                   </div>
@@ -1167,7 +1167,7 @@
                       <input type="number" min="1" max="365" v-model.number="webdav.keep_days" placeholder="默认 10" title="每次备份后自动删除超过该天数的远程旧备份" />
                     </div>
                   </div>
-                  <div style="margin-top:16px; display:flex; justify-content:space-between; align-items:center">
+                  <div style="margin-top:10px; display:flex; justify-content:space-between; align-items:center">
                     <button type="button" class="btn-sm" :disabled="webdavTesting || !webdav.url" @click="testAndBackupWebDAV(1)">
                       {{ webdavTesting ? '正在上传中...' : '立即测试并上传备份' }}
                     </button>
@@ -1176,7 +1176,7 @@
                 </form>
 
                 <!-- 远程备份文件列表 -->
-                <div style="margin-top:18px; border-top:1px solid var(--line); padding-top:14px">
+                <div style="margin-top:10px; border-top:1px solid var(--line); padding-top:10px">
                   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
                     <h4 style="margin:0; font-size:13px">📁 远程备份列表</h4>
                     <button type="button" class="btn-sm" :disabled="webdavListLoading || !webdav.url" @click="loadWebDAVList(1)">
@@ -1211,18 +1211,18 @@
 
               <!-- WebDAV 备份 2 -->
               <div class="card">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
                   <h3 style="margin:0">☁️ WebDAV 备份 2（第二网盘）</h3>
                   <label style="display:flex; align-items:center; gap:6px; margin:0; cursor:pointer">
                     <input type="checkbox" v-model="webdav2.enabled" style="width:auto" />
                     <span>启用自动备份</span>
                   </label>
                 </div>
-                <p class="text-muted" style="margin-bottom:14px; font-size:12.5px">
+                <p class="text-muted" style="margin-bottom:8px; font-size:12.5px">
                   第二网盘容灾备份。启用后每次自动备份会<strong>同时上传到两个网盘</strong>，互为容灾。
                 </p>
 
-                <div v-if="webdav2.last_backup_at" style="background:#f8fafc; padding:10px 12px; border-radius:8px; margin-bottom:14px; font-size:12px; border:1px solid var(--line)">
+                <div v-if="webdav2.last_backup_at" style="background:#f8fafc; padding:8px 10px; border-radius:8px; margin-bottom:8px; font-size:12px; border:1px solid var(--line)">
                   <div>上次备份时间：<strong>{{ dt(webdav2.last_backup_at) }}</strong></div>
                   <div style="margin-top:3px">
                     状态：
@@ -1242,7 +1242,7 @@
                 </div>
 
                 <form @submit.prevent="saveWebDAVConfig(2)">
-                  <div class="form-row">
+                  <div class="form-row" style="margin-bottom:10px">
                     <label>WebDAV 服务器地址 (URL) *</label>
                     <input v-model="webdav2.url" placeholder="如 https://dav.jianguoyun.com/dav/" />
                   </div>
@@ -1264,7 +1264,7 @@
                       <input type="number" min="1" max="365" v-model.number="webdav2.keep_days" placeholder="默认 10" title="每次备份后自动删除超过该天数的远程旧备份" />
                     </div>
                   </div>
-                  <div style="margin-top:16px; display:flex; justify-content:space-between; align-items:center">
+                  <div style="margin-top:10px; display:flex; justify-content:space-between; align-items:center">
                     <button type="button" class="btn-sm" :disabled="webdav2Testing || !webdav2.url" @click="testAndBackupWebDAV(2)">
                       {{ webdav2Testing ? '正在上传中...' : '立即测试并上传备份' }}
                     </button>
@@ -1273,7 +1273,7 @@
                 </form>
 
                 <!-- 远程备份文件列表 -->
-                <div style="margin-top:18px; border-top:1px solid var(--line); padding-top:14px">
+                <div style="margin-top:10px; border-top:1px solid var(--line); padding-top:10px">
                   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
                     <h4 style="margin:0; font-size:13px">📁 远程备份列表</h4>
                     <button type="button" class="btn-sm" :disabled="webdav2ListLoading || !webdav2.url" @click="loadWebDAVList(2)">
@@ -1306,6 +1306,10 @@
                 </div>
               </div>
 
+          </div>
+
+            <!-- 左列：系统配置与WebDAV -->
+            <div class="settings-col">
               <!-- 公司与系统配置 -->
               <div class="card">
                 <h3>🏢 公司与系统配置</h3>

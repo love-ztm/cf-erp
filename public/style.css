@@ -825,6 +825,20 @@ button:disabled {
   margin-bottom: 20px;
 }
 
+/* ===== 双网盘并排布局 ===== */
+.webdav-grid {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: 14px;
+  align-items: start;
+  margin-bottom: 0;
+}
+.webdav-grid .card { padding: 14px 16px; margin-bottom: 0; }
+.webdav-grid .form-row { margin-bottom: 10px; }
+.webdav-grid .form-grid { gap: 8px; }
+.webdav-grid h3 { font-size: 14.5px; }
+
 /* ===== 移动端响应式 ===== */
 @media (max-width: 768px) {
   .layout { flex-direction: column; }
@@ -835,6 +849,7 @@ button:disabled {
   .main { padding: 16px; }
   .grid-cards { grid-template-columns: 1fr 1fr; }
   .settings-grid { grid-template-columns: 1fr; }
+  .webdav-grid { grid-template-columns: 1fr; }
 }
 
 /* ===== 视觉升级（2026-10） ===== */
