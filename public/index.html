@@ -1115,7 +1115,7 @@
               <!-- WebDAV 远程自动定时备份 -->
               <div class="card">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
-                  <h3 style="margin:0">☁️ WebDAV 远程定时自动备份</h3>
+                  <h3 style="margin:0">☁️ WebDAV 备份 1（主）</h3>
                   <label style="display:flex; align-items:center; gap:6px; margin:0; cursor:pointer">
                     <input type="checkbox" v-model="webdav.enabled" style="width:auto" />
                     <span>启用自动备份</span>
@@ -1144,7 +1144,7 @@
                   </div>
                 </div>
 
-                <form @submit.prevent="saveWebDAVConfig">
+                <form @submit.prevent="saveWebDAVConfig(1)">
                   <div class="form-row">
                     <label>WebDAV 服务器地址 (URL) *</label>
                     <input v-model="webdav.url" placeholder="如 https://dav.jianguoyun.com/dav/" />
@@ -1174,7 +1174,7 @@
                     </div>
                   </div>
                   <div style="margin-top:16px; display:flex; justify-content:space-between; align-items:center">
-                    <button type="button" class="btn-sm" :disabled="webdavTesting || !webdav.url" @click="testAndBackupWebDAV">
+                    <button type="button" class="btn-sm" :disabled="webdavTesting || !webdav.url" @click="testAndBackupWebDAV(1)">
                       {{ webdavTesting ? '正在上传中...' : '立即测试并上传备份' }}
                     </button>
                     <button class="btn-primary" type="submit">保存配置</button>
@@ -1185,7 +1185,7 @@
                 <div style="margin-top:18px; border-top:1px solid var(--line); padding-top:14px">
                   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
                     <h4 style="margin:0; font-size:13px">📁 远程备份列表</h4>
-                    <button type="button" class="btn-sm" :disabled="webdavListLoading || !webdav.url" @click="loadWebDAVList">
+                    <button type="button" class="btn-sm" :disabled="webdavListLoading || !webdav.url" @click="loadWebDAVList(1)">
                       {{ webdavListLoading ? '正在获取...' : '刷新列表' }}
                     </button>
                   </div>
@@ -1201,7 +1201,7 @@
                           <td>{{ f.modified }}</td>
                           <td>{{ fmtSize(f.size) }}</td>
                           <td>
-                            <button type="button" class="btn-sm btn-danger" :disabled="webdavRestoring" @click="restoreFromWebDAV(f)">
+                            <button type="button" class="btn-sm btn-danger" :disabled="webdavRestoring" @click="restoreFromWebDAV(1, f)">
                               {{ webdavRestoring ? '恢复中...' : '恢复' }}
                             </button>
                           </td>
@@ -1210,6 +1210,109 @@
                     </table>
                   </div>
                   <div v-else-if="webdav.url && !webdavListLoading" class="text-muted" style="font-size:12px; padding:6px 0">
+                    暂无远程备份文件，可点击上方「立即测试并上传备份」生成第一份。
+                  </div>
+                </div>
+              </div>
+
+              <!-- WebDAV 备份 2 -->
+              <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
+                  <h3 style="margin:0">☁️ WebDAV 备份 2（第二网盘）</h3>
+                  <label style="display:flex; align-items:center; gap:6px; margin:0; cursor:pointer">
+                    <input type="checkbox" v-model="webdav2.enabled" style="width:auto" />
+                    <span>启用自动备份</span>
+                  </label>
+                </div>
+                <p class="text-muted" style="margin-bottom:14px; font-size:12.5px">
+                  第二网盘容灾备份。启用后每次自动备份会<strong>同时上传到两个网盘</strong>，互为容灾。
+                </p>
+
+                <div v-if="webdav2.last_backup_at" style="background:#f8fafc; padding:10px 12px; border-radius:8px; margin-bottom:14px; font-size:12px; border:1px solid var(--line)">
+                  <div>上次备份时间：<strong>{{ dt(webdav2.last_backup_at) }}</strong></div>
+                  <div style="margin-top:3px">
+                    状态：
+                    <span class="badge" :class="webdav2.last_status === 'success' ? 'green' : 'red'">
+                      {{ webdav2.last_status === 'success' ? '成功' : '失败' }}
+                    </span>
+                    <span v-if="webdav2.last_error" class="text-danger" style="margin-left:6px">{{ webdav2.last_error }}</span>
+                  </div>
+                  <div v-if="webdav2.sched_last_at" style="margin-top:6px; border-top:1px dashed #e2e8f0; padding-top:6px">
+                    定时/自动备份：<strong>{{ dt(webdav2.sched_last_at) }}</strong>
+                    （{{ webdav2.sched_last_source === 'cron' ? '凌晨定时' : '访问自动补备份' }}）
+                    <span class="badge" :class="webdav2.sched_last_status === 'success' ? 'green' : (webdav2.sched_last_status === 'running' ? 'orange' : 'red')">
+                      {{ webdav2.sched_last_status === 'success' ? '成功' : (webdav2.sched_last_status === 'running' ? '进行中' : '失败') }}
+                    </span>
+                    <span v-if="webdav2.sched_last_error" class="text-danger" style="margin-left:6px">{{ webdav2.sched_last_error }}</span>
+                  </div>
+                </div>
+
+                <form @submit.prevent="saveWebDAVConfig(2)">
+                  <div class="form-row">
+                    <label>WebDAV 服务器地址 (URL) *</label>
+                    <input v-model="webdav2.url" placeholder="如 https://dav.jianguoyun.com/dav/" />
+                  </div>
+                  <div class="form-grid">
+                    <div>
+                      <label>账号 / 用户名</label>
+                      <input v-model="webdav2.username" placeholder="WebDAV 用户名" />
+                    </div>
+                    <div>
+                      <label>密码 / 应用授权码</label>
+                      <input type="password" v-model="webdav2.password" placeholder="留空保持原密码" />
+                    </div>
+                  </div>
+                  <div class="form-row" style="margin-top:12px">
+                    <label>远程存储目录</label>
+                    <input v-model="webdav2.remote_dir" placeholder="默认 /erp-backups" />
+                  </div>
+                  <div class="form-grid" style="margin-top:12px">
+                    <div>
+                      <label>只保留最近天数</label>
+                      <input type="number" min="1" max="365" v-model.number="webdav2.keep_days" placeholder="默认 10 天" />
+                    </div>
+                    <div>
+                      <label style="color:var(--muted)">说明</label>
+                      <div class="text-muted" style="font-size:12px; padding-top:6px">每次备份后自动删除超过该天数的远程旧备份。</div>
+                    </div>
+                  </div>
+                  <div style="margin-top:16px; display:flex; justify-content:space-between; align-items:center">
+                    <button type="button" class="btn-sm" :disabled="webdav2Testing || !webdav2.url" @click="testAndBackupWebDAV(2)">
+                      {{ webdav2Testing ? '正在上传中...' : '立即测试并上传备份' }}
+                    </button>
+                    <button class="btn-primary" type="submit">保存配置</button>
+                  </div>
+                </form>
+
+                <!-- 远程备份文件列表 -->
+                <div style="margin-top:18px; border-top:1px solid var(--line); padding-top:14px">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
+                    <h4 style="margin:0; font-size:13px">📁 远程备份列表</h4>
+                    <button type="button" class="btn-sm" :disabled="webdav2ListLoading || !webdav2.url" @click="loadWebDAVList(2)">
+                      {{ webdav2ListLoading ? '正在获取...' : '刷新列表' }}
+                    </button>
+                  </div>
+
+                  <div v-if="webdav2RemoteList.length" class="table-wrap" style="max-height:220px; overflow:auto">
+                    <table style="font-size:12px">
+                      <thead>
+                        <tr><th>备份文件</th><th>时间</th><th>大小</th><th></th></tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="f in webdav2RemoteList" :key="f.name">
+                          <td style="max-width:170px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ f.name }}</td>
+                          <td>{{ f.modified }}</td>
+                          <td>{{ fmtSize(f.size) }}</td>
+                          <td>
+                            <button type="button" class="btn-sm btn-danger" :disabled="webdav2Restoring" @click="restoreFromWebDAV(2, f)">
+                              {{ webdav2Restoring ? '恢复中...' : '恢复' }}
+                            </button>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div v-else-if="webdav2.url && !webdav2ListLoading" class="text-muted" style="font-size:12px; padding:6px 0">
                     暂无远程备份文件，可点击上方「立即测试并上传备份」生成第一份。
                   </div>
                 </div>

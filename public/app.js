@@ -169,6 +169,26 @@ const app = createApp({
       webdavRemoteList: [],   // WebDAV 远程备份文件列表
       webdavListLoading: false,
       webdavRestoring: false,
+      // 网盘2
+      webdav2: {
+        enabled: false,
+        url: '',
+        username: '',
+        password: '',
+        remote_dir: '/erp-backups',
+        keep_days: 10,
+        last_backup_at: '',
+        last_status: '',
+        last_error: '',
+        sched_last_at: '',
+        sched_last_source: '',
+        sched_last_status: '',
+        sched_last_error: '',
+      },
+      webdav2Testing: false,
+      webdav2RemoteList: [],
+      webdav2ListLoading: false,
+      webdav2Restoring: false,
 
       // 往来单位
       partyTab: 'supplier',
@@ -628,21 +648,23 @@ const app = createApp({
           reqs.push(api('/users').catch(() => []))
         }
         const [wRes, cRes, uList] = await Promise.all(reqs)
-        this.webdav = {
-          enabled: !!wRes.enabled,
-          url: wRes.url || '',
-          username: wRes.username || '',
-          password: wRes.password || '',
-          remote_dir: wRes.remote_dir || '/erp-backups',
-          keep_days: wRes.keep_days || 10,
-          last_backup_at: wRes.last_backup_at || '',
-          last_status: wRes.last_status || '',
-          last_error: wRes.last_error || '',
-          sched_last_at: wRes.sched_last_at || '',
-          sched_last_source: wRes.sched_last_source || '',
-          sched_last_status: wRes.sched_last_status || '',
-          sched_last_error: wRes.sched_last_error || '',
-        }
+        const buildWebdav = (cfg) => ({
+          enabled: !!cfg.enabled,
+          url: cfg.url || '',
+          username: cfg.username || '',
+          password: cfg.password || '',
+          remote_dir: cfg.remote_dir || '/erp-backups',
+          keep_days: cfg.keep_days || 10,
+          last_backup_at: cfg.last_backup_at || '',
+          last_status: cfg.last_status || '',
+          last_error: cfg.last_error || '',
+          sched_last_at: cfg.sched_last_at || '',
+          sched_last_source: cfg.sched_last_source || '',
+          sched_last_status: cfg.sched_last_status || '',
+          sched_last_error: cfg.sched_last_error || '',
+        })
+        this.webdav = buildWebdav(wRes.slot1 || {})
+        this.webdav2 = buildWebdav(wRes.slot2 || {})
         if (cRes) {
           this.company = { ...this.company, ...cRes }
           document.title = this.company.app_title || 'Cloud ERP 进销存'
@@ -650,10 +672,9 @@ const app = createApp({
         if (uList) {
           this.userList = uList
         }
-        // 已配置 WebDAV 地址时，自动拉取远程备份列表
-        if (wRes.url) {
-          this.loadWebDAVList()
-        }
+        // 已配置 WebDAV 地址时，自动拉取两个网盘的远程备份列表
+        if ((wRes.slot1 || {}).url) this.loadWebDAVList(1)
+        if ((wRes.slot2 || {}).url) this.loadWebDAVList(2)
       } catch (e) {
         // 忽略静默失败
       }
@@ -670,85 +691,94 @@ const app = createApp({
         this.toast(e.message, 'err')
       }
     },
-    async saveWebDAVConfig() {
+    async saveWebDAVConfig(slot = 1) {
+      const m = slot === 2 ? this.webdav2 : this.webdav
       try {
         await api('/settings/webdav', {
           method: 'POST',
           body: {
-            enabled: this.webdav.enabled,
-            url: this.webdav.url,
-            username: this.webdav.username,
-            password: this.webdav.password,
-            remote_dir: this.webdav.remote_dir,
-            keep_days: this.webdav.keep_days,
+            slot,
+            enabled: m.enabled,
+            url: m.url,
+            username: m.username,
+            password: m.password,
+            remote_dir: m.remote_dir,
+            keep_days: m.keep_days,
           },
         })
-        this.toast('WebDAV 配置已保存')
+        this.toast(`网盘${slot} WebDAV 配置已保存`)
         await this.loadSettings()
       } catch (e) {
         this.toast(e.message, 'err')
       }
     },
-    async testAndBackupWebDAV() {
-      if (!this.webdav.url) return this.toast('请先输入 WebDAV 服务器地址', 'err')
-      this.webdavTesting = true
+    async testAndBackupWebDAV(slot = 1) {
+      const m = slot === 2 ? this.webdav2 : this.webdav
+      const testingKey = slot === 2 ? 'webdav2Testing' : 'webdavTesting'
+      if (!m.url) return this.toast('请先输入 WebDAV 服务器地址', 'err')
+      this[testingKey] = true
       try {
         // 先保存当前填写的配置
         await api('/settings/webdav', {
           method: 'POST',
           body: {
-            enabled: this.webdav.enabled,
-            url: this.webdav.url,
-            username: this.webdav.username,
-            password: this.webdav.password,
-            remote_dir: this.webdav.remote_dir,
-            keep_days: this.webdav.keep_days,
+            slot,
+            enabled: m.enabled,
+            url: m.url,
+            username: m.username,
+            password: m.password,
+            remote_dir: m.remote_dir,
+            keep_days: m.keep_days,
           },
         })
-        const res = await api('/settings/webdav/test', { method: 'POST' })
-        this.toast(`备份并上传成功：${res.filename}`)
+        const res = await api('/settings/webdav/test', { method: 'POST', body: { slot } })
+        this.toast(`网盘${slot} 备份并上传成功：${res.filename}`)
         await this.loadSettings()
       } catch (e) {
         this.toast(`测试失败：${e.message}`, 'err')
         await this.loadSettings()
       } finally {
-        this.webdavTesting = false
+        this[testingKey] = false
       }
     },
-    // 拉取 WebDAV 远程备份文件列表
-    async loadWebDAVList() {
-      if (!this.webdav.url) return
-      this.webdavListLoading = true
+    // 拉取 WebDAV 远程备份文件列表（slot = 1/2）
+    async loadWebDAVList(slot = 1) {
+      const m = slot === 2 ? this.webdav2 : this.webdav
+      const listKey = slot === 2 ? 'webdav2RemoteList' : 'webdavRemoteList'
+      const loadingKey = slot === 2 ? 'webdav2ListLoading' : 'webdavListLoading'
+      if (!m.url) return
+      this[loadingKey] = true
       try {
-        const res = await api('/settings/webdav/list', { method: 'POST' })
-        this.webdavRemoteList = Array.isArray(res.files) ? res.files : []
+        const res = await api('/settings/webdav/list', { method: 'POST', body: { slot } })
+        this[listKey] = Array.isArray(res.files) ? res.files : []
         if (res.error) this.toast(res.error, 'err')
       } catch (e) {
-        this.webdavRemoteList = []
+        this[listKey] = []
         this.toast('无法获取远程备份列表：' + e.message, 'err')
       } finally {
-        this.webdavListLoading = false
+        this[loadingKey] = false
       }
     },
-    // 从 WebDAV 远程备份恢复
-    async restoreFromWebDAV(file) {
+    // 从 WebDAV 远程备份恢复（slot = 1/2）
+    async restoreFromWebDAV(slot, file) {
       const name = typeof file === 'string' ? file : file?.name
       if (!name) return
       if (!confirm(`确定要从远程备份「${name}」恢复数据吗？\n\n警告：当前所有数据将被该备份文件完全覆盖！`)) return
       if (!confirm('再次确认：还原操作不可逆，原有数据将全部丢失，是否立即执行？')) return
-      this.webdavRestoring = true
+      const restoringKey = slot === 2 ? 'webdav2Restoring' : 'webdavRestoring'
+      this[restoringKey] = true
       try {
         const res = await api('/settings/webdav/restore', {
           method: 'POST',
-          body: { filename: name },
+          body: { slot, filename: name },
         })
         this.toast(`已从远程备份恢复成功：${res.filename || name}`)
         await this.loadView()
-        await this.loadWebDAVList()
+        await this.loadWebDAVList(slot)
       } catch (e) {
         this.toast('恢复失败：' + e.message, 'err')
       } finally {
-        this.webdavRestoring = false
+        this[restoringKey] = false
       }
     },
     async downloadBackup() {
