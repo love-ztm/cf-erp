@@ -1149,28 +1149,22 @@
                     <label>WebDAV 服务器地址 (URL) *</label>
                     <input v-model="webdav.url" placeholder="如 https://dav.jianguoyun.com/dav/" />
                   </div>
-                  <div class="form-grid">
+                  <div class="form-grid" style="grid-template-columns: 1.1fr 1fr 1.1fr 0.7fr; gap:8px">
                     <div>
                       <label>账号 / 用户名</label>
                       <input v-model="webdav.username" placeholder="WebDAV 用户名" />
                     </div>
                     <div>
-                      <label>密码 / 应用授权码</label>
+                      <label>密码 / 授权码</label>
                       <input type="password" v-model="webdav.password" placeholder="留空保持原密码" />
                     </div>
-                  </div>
-                  <div class="form-row" style="margin-top:12px">
-                    <label>远程存储目录</label>
-                    <input v-model="webdav.remote_dir" placeholder="默认 /erp-backups" />
-                  </div>
-                  <div class="form-grid" style="margin-top:12px">
                     <div>
-                      <label>只保留最近天数</label>
-                      <input type="number" min="1" max="365" v-model.number="webdav.keep_days" placeholder="默认 10 天" />
+                      <label>远程存储目录</label>
+                      <input v-model="webdav.remote_dir" placeholder="默认 /erp-backups" />
                     </div>
                     <div>
-                      <label style="color:var(--muted)">说明</label>
-                      <div class="text-muted" style="font-size:12px; padding-top:6px">每次备份后自动删除超过该天数的远程旧备份。</div>
+                      <label>保留天数</label>
+                      <input type="number" min="1" max="365" v-model.number="webdav.keep_days" placeholder="默认 10" title="每次备份后自动删除超过该天数的远程旧备份" />
                     </div>
                   </div>
                   <div style="margin-top:16px; display:flex; justify-content:space-between; align-items:center">
@@ -1252,28 +1246,22 @@
                     <label>WebDAV 服务器地址 (URL) *</label>
                     <input v-model="webdav2.url" placeholder="如 https://dav.jianguoyun.com/dav/" />
                   </div>
-                  <div class="form-grid">
+                  <div class="form-grid" style="grid-template-columns: 1.1fr 1fr 1.1fr 0.7fr; gap:8px">
                     <div>
                       <label>账号 / 用户名</label>
                       <input v-model="webdav2.username" placeholder="WebDAV 用户名" />
                     </div>
                     <div>
-                      <label>密码 / 应用授权码</label>
+                      <label>密码 / 授权码</label>
                       <input type="password" v-model="webdav2.password" placeholder="留空保持原密码" />
                     </div>
-                  </div>
-                  <div class="form-row" style="margin-top:12px">
-                    <label>远程存储目录</label>
-                    <input v-model="webdav2.remote_dir" placeholder="默认 /erp-backups" />
-                  </div>
-                  <div class="form-grid" style="margin-top:12px">
                     <div>
-                      <label>只保留最近天数</label>
-                      <input type="number" min="1" max="365" v-model.number="webdav2.keep_days" placeholder="默认 10 天" />
+                      <label>远程存储目录</label>
+                      <input v-model="webdav2.remote_dir" placeholder="默认 /erp-backups" />
                     </div>
                     <div>
-                      <label style="color:var(--muted)">说明</label>
-                      <div class="text-muted" style="font-size:12px; padding-top:6px">每次备份后自动删除超过该天数的远程旧备份。</div>
+                      <label>保留天数</label>
+                      <input type="number" min="1" max="365" v-model.number="webdav2.keep_days" placeholder="默认 10" title="每次备份后自动删除超过该天数的远程旧备份" />
                     </div>
                   </div>
                   <div style="margin-top:16px; display:flex; justify-content:space-between; align-items:center">
